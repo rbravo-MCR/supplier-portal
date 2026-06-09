@@ -1,0 +1,207 @@
+<?php
+
+use App\Concerns\RemembersModelRows;
+use App\Models\Supplier;
+use App\Models\User;
+use Flux\Flux;
+use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
+use Livewire\Attributes\Computed;
+use Livewire\Attributes\Title;
+use Livewire\Component;
+use Livewire\WithPagination;
+
+new #[Title('Usuarios')] class extends Component {
+    use WithPagination, RemembersModelRows;
+
+    public ?int $supplierId = null;
+
+    public string $name = '';
+
+    public string $email = '';
+
+    public string $password = '';
+
+    public string $role = 'supplier_user';
+
+    public string $status = 'active';
+
+    public string $search = '';
+
+    public function mount(): void
+    {
+        $this->supplierId = Auth::user()->supplier_id;
+    }
+
+    public function updatedSearch(): void
+    {
+        $this->resetPage();
+    }
+
+    public function save(): void
+    {
+        $validated = $this->validate([
+            'supplierId' => ['nullable', 'integer', Rule::exists('suppliers', 'id')],
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique('users', 'email')],
+            'password' => ['required', 'string', 'min:8', 'max:255'],
+            'role' => ['required', Rule::in(['admin', 'supplier_admin', 'supplier_user'])],
+            'status' => ['required', Rule::in(['active', 'inactive'])],
+        ]);
+
+        $supplierId = Auth::user()->supplier_id ?: $validated['supplierId'];
+
+        User::query()->create([
+            'supplier_id' => $supplierId,
+            'name' => $validated['name'],
+            'email' => str($validated['email'])->lower()->toString(),
+            'email_verified_at' => now(),
+            'password' => $validated['password'],
+            'role' => $validated['role'],
+            'status' => $validated['status'],
+        ]);
+
+        $this->reset(['name', 'email', 'password']);
+        $this->role = 'supplier_user';
+        $this->status = 'active';
+        $this->resetPage();
+
+        Flux::toast(variant: 'success', text: __('Usuario creado.'));
+    }
+
+    /**
+     * @return Collection<int, Supplier>
+     */
+    #[Computed]
+    public function suppliers(): Collection
+    {
+        return $this->rememberModels('suppliers.active', Supplier::class, function () {
+            return Supplier::query()
+                ->select(['id', 'name', 'code'])
+                ->active()
+                ->orderBy('name')
+                ->get();
+        });
+    }
+
+    #[Computed]
+    public function users(): LengthAwarePaginator
+    {
+        return User::query()
+            ->with('supplier:id,name,code')
+            ->forSupplier(Auth::user()->supplier_id)
+            ->when($this->search !== '', function (Builder $query): void {
+                $query->search($this->search);
+            })
+            ->orderBy('name')
+            ->paginate(10);
+    }
+};
+?>
+
+<section class="flex h-full w-full flex-1 flex-col gap-6">
+    <div class="flex flex-col gap-2">
+        <flux:heading size="xl">{{ __('Usuarios') }}</flux:heading>
+        <flux:text class="max-w-3xl">
+            {{ __('Administra acceso al portal, proveedor asignado, rol operativo y estado de cada cuenta.') }}
+        </flux:text>
+    </div>
+
+    <form wire:submit="save" class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
+        <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <flux:input wire:model="name" :label="__('Nombre')" placeholder="María López" data-test="user-name" />
+            <flux:input wire:model="email" :label="__('Correo')" type="email" placeholder="maria@proveedor.com" data-test="user-email" />
+            <flux:input wire:model="password" :label="__('Contraseña temporal')" type="password" data-test="user-password" />
+
+            @if (! Auth::user()->supplier_id)
+                <flux:select wire:model="supplierId" :label="__('Proveedor')" data-test="user-supplier">
+                    <flux:select.option value="">{{ __('Sin proveedor') }}</flux:select.option>
+                    @foreach ($this->suppliers as $supplier)
+                        <flux:select.option :value="$supplier->id">{{ $supplier->name }} · {{ $supplier->code }}</flux:select.option>
+                    @endforeach
+                </flux:select>
+            @endif
+
+            <flux:select wire:model="role" :label="__('Rol')" data-test="user-role">
+                <flux:select.option value="admin">{{ __('Administrador') }}</flux:select.option>
+                <flux:select.option value="supplier_admin">{{ __('Admin proveedor') }}</flux:select.option>
+                <flux:select.option value="supplier_user">{{ __('Usuario proveedor') }}</flux:select.option>
+            </flux:select>
+
+            <flux:select wire:model="status" :label="__('Estado')" data-test="user-status">
+                <flux:select.option value="active">{{ __('Activo') }}</flux:select.option>
+                <flux:select.option value="inactive">{{ __('Inactivo') }}</flux:select.option>
+            </flux:select>
+        </div>
+
+        <div class="mt-4 flex justify-end">
+            <flux:button type="submit" variant="primary" icon="user-plus" data-test="user-submit">
+                {{ __('Crear usuario') }}
+            </flux:button>
+        </div>
+    </form>
+
+    <div class="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
+        <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div>
+                <flux:heading>{{ __('Directorio de usuarios') }}</flux:heading>
+                <flux:text>{{ __('Cuentas con acceso al portal.') }}</flux:text>
+            </div>
+
+            <flux:input wire:model.live.debounce.300ms="search" :label="__('Buscar')" placeholder="Nombre, correo o rol" class="md:w-80" data-test="user-search" />
+        </div>
+
+        <flux:table :paginate="$this->users">
+            <flux:table.columns>
+                <flux:table.column>{{ __('Nombre') }}</flux:table.column>
+                <flux:table.column>{{ __('Correo') }}</flux:table.column>
+                <flux:table.column>{{ __('Proveedor') }}</flux:table.column>
+                <flux:table.column>{{ __('Rol') }}</flux:table.column>
+                <flux:table.column>{{ __('Estado') }}</flux:table.column>
+                <flux:table.column>{{ __('2FA') }}</flux:table.column>
+                <flux:table.column>{{ __('Último acceso') }}</flux:table.column>
+            </flux:table.columns>
+
+            <flux:table.rows>
+                @forelse ($this->users as $user)
+                    <flux:table.row :key="$user->id">
+                        <flux:table.cell variant="strong">{{ $user->name }}</flux:table.cell>
+                        <flux:table.cell>{{ $user->email }}</flux:table.cell>
+                        <flux:table.cell>{{ $user->supplier?->code ?? '-' }}</flux:table.cell>
+                        <flux:table.cell>
+                            <flux:badge :color="$user->role === 'admin' ? 'blue' : 'zinc'">
+                                {{ match ($user->role) {
+                                    'admin' => __('Administrador'),
+                                    'supplier_admin' => __('Admin proveedor'),
+                                    default => __('Usuario proveedor'),
+                                } }}
+                            </flux:badge>
+                        </flux:table.cell>
+                        <flux:table.cell>
+                            <flux:badge :color="$user->status === 'active' ? 'green' : 'zinc'">
+                                {{ $user->status === 'active' ? __('Activo') : __('Inactivo') }}
+                            </flux:badge>
+                        </flux:table.cell>
+                        <flux:table.cell>
+                            <flux:badge :color="$user->two_factor_enabled ? 'green' : 'zinc'">
+                                {{ $user->two_factor_enabled ? __('Activo') : __('No') }}
+                            </flux:badge>
+                        </flux:table.cell>
+                        <flux:table.cell>{{ $user->last_login_at?->diffForHumans() ?? '-' }}</flux:table.cell>
+                    </flux:table.row>
+                @empty
+                    <flux:table.row>
+                        <flux:table.cell colspan="7">
+                            <div class="py-8 text-center">
+                                <flux:text>{{ __('Aún no hay usuarios registrados.') }}</flux:text>
+                            </div>
+                        </flux:table.cell>
+                    </flux:table.row>
+                @endforelse
+            </flux:table.rows>
+        </flux:table>
+    </div>
+</section>
