@@ -16,21 +16,38 @@
         <!-- Session Status -->
         <x-auth-session-status class="mb-5 rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700" :status="session('status')" />
 
-        <x-passkey-verify />
-
-        <form method="POST" action="{{ route('login.store') }}" class="flex flex-col gap-5" x-data="{ submitting: false }" x-on:submit="submitting = true">
+        <form
+            method="POST"
+            action="{{ route('login.store') }}"
+            class="flex flex-col gap-5 [&_[data-flux-label]]:font-semibold [&_[data-flux-label]]:text-zinc-900"
+            x-data="{ submitting: false }"
+            x-on:submit="submitting = true"
+        >
             @csrf
 
-            <!-- Email Address -->
+            <flux:select
+                name="supplier_code"
+                :label="__('Proveedor')"
+                data-test="login-supplier"
+            >
+                <flux:select.option value="">{{ __('Selecciona proveedor') }}</flux:select.option>
+                @foreach ($suppliers as $supplier)
+                    <flux:select.option :value="$supplier->code" :selected="old('supplier_code') === $supplier->code">
+                        {{ $supplier->name }} · {{ $supplier->code }}
+                    </flux:select.option>
+                @endforeach
+            </flux:select>
+
             <flux:input
-                name="email"
-                :label="__('Correo corporativo')"
-                :value="old('email')"
-                type="email"
+                name="username"
+                :label="__('Usuario')"
+                :value="old('username')"
+                type="text"
                 required
                 autofocus
-                autocomplete="email"
-                placeholder="usuario@empresa.com"
+                autocomplete="username"
+                placeholder="usuario"
+                input:class="text-zinc-950! placeholder:text-zinc-600!"
             />
 
             <!-- Password -->
@@ -42,6 +59,7 @@
                     required
                     autocomplete="current-password"
                     :placeholder="__('Contraseña')"
+                    input:class="text-zinc-950! placeholder:text-zinc-600!"
                     viewable
                 />
             </div>
@@ -67,16 +85,6 @@
                 </flux:button>
             </div>
         </form>
-
-        <div class="mt-6 rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-            <div class="flex gap-3">
-                <flux:icon name="information-circle" class="mt-0.5 size-5 shrink-0 text-zinc-500" />
-                <div class="space-y-1 text-sm leading-6 text-zinc-600">
-                    <p class="font-medium text-zinc-800">{{ __('Cómo funciona el acceso') }}</p>
-                    <p>{{ __('Primero validamos tus credenciales. Si tu cuenta tiene doble factor, continuarás al desafío de seguridad. Después se abre el panel que corresponde a tu rol.') }}</p>
-                </div>
-            </div>
-        </div>
 
         <div class="mt-6 space-x-1 text-center text-sm text-zinc-600 rtl:space-x-reverse">
             <span>{{ __('¿No tienes cuenta?') }}</span>

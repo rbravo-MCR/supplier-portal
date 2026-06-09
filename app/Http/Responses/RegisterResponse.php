@@ -14,7 +14,7 @@ class RegisterResponse implements RegisterResponseContract
     public function toResponse($request): Response
     {
         return $request->wantsJson()
-            ? new JsonResponse(['two_factor' => false], 201)
+            ? new JsonResponse(['redirect' => $this->redirectPathForPortalPanel($request)], 201)
             : redirect()->intended($this->redirectPathForPortalPanel($request));
     }
 }

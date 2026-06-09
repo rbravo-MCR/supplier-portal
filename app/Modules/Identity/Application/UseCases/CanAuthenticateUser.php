@@ -11,6 +11,8 @@ class CanAuthenticateUser
      */
     private const SUPPLIER_ROLES = [
         'supplier_admin',
+        'supplier_reservations',
+        'supplier_pricing',
         'supplier_user',
     ];
 

@@ -4,11 +4,12 @@ use App\Models\AuditLog;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Policies\AuditLogPolicy;
+use App\Policies\BookingPolicy;
 use App\Policies\RatePolicy;
 use App\Policies\UserPolicy;
 
 test('platform roles can view users and only non auditors can mutate users', function () {
-    $policy = new UserPolicy();
+    $policy = new UserPolicy;
     $target = User::factory()->make();
 
     foreach (['super_admin', 'admin', 'auditor'] as $role) {
@@ -30,7 +31,7 @@ test('platform roles can view users and only non auditors can mutate users', fun
 test('supplier admin can manage only users from own supplier', function () {
     $supplier = Supplier::factory()->create();
     $otherSupplier = Supplier::factory()->create();
-    $policy = new UserPolicy();
+    $policy = new UserPolicy;
     $actor = User::factory()->make([
         'role' => 'supplier_admin',
         'supplier_id' => $supplier->id,
@@ -50,7 +51,7 @@ test('supplier admin can manage only users from own supplier', function () {
 
 test('supplier user cannot manage users', function () {
     $supplier = Supplier::factory()->create();
-    $policy = new UserPolicy();
+    $policy = new UserPolicy;
     $actor = User::factory()->make([
         'role' => 'supplier_user',
         'supplier_id' => $supplier->id,
@@ -64,18 +65,44 @@ test('supplier user cannot manage users', function () {
         ->and($policy->disable($actor, $target))->toBeFalse();
 });
 
+test('supplier operational roles cannot manage users', function (string $role) {
+    $supplier = Supplier::factory()->create();
+    $policy = new UserPolicy;
+    $actor = User::factory()->make([
+        'role' => $role,
+        'supplier_id' => $supplier->id,
+    ]);
+    $target = User::factory()->make(['supplier_id' => $supplier->id]);
+
+    expect($policy->viewAny($actor))->toBeFalse()
+        ->and($policy->view($actor, $target))->toBeFalse()
+        ->and($policy->create($actor))->toBeFalse()
+        ->and($policy->update($actor, $target))->toBeFalse()
+        ->and($policy->disable($actor, $target))->toBeFalse();
+})->with(['supplier_reservations', 'supplier_pricing']);
+
 test('rate import excel follows permission matrix', function () {
-    $policy = new RatePolicy();
+    $policy = new RatePolicy;
 
     expect($policy->importExcel(User::factory()->make(['role' => 'super_admin'])))->toBeTrue()
         ->and($policy->importExcel(User::factory()->make(['role' => 'admin'])))->toBeTrue()
         ->and($policy->importExcel(User::factory()->make(['role' => 'supplier_admin'])))->toBeTrue()
+        ->and($policy->importExcel(User::factory()->make(['role' => 'supplier_pricing'])))->toBeTrue()
+        ->and($policy->importExcel(User::factory()->make(['role' => 'supplier_reservations'])))->toBeFalse()
         ->and($policy->importExcel(User::factory()->make(['role' => 'auditor'])))->toBeFalse()
         ->and($policy->importExcel(User::factory()->make(['role' => 'supplier_user'])))->toBeFalse();
 });
 
+test('booking access follows supplier operational roles', function () {
+    $policy = new BookingPolicy;
+
+    expect($policy->viewAny(User::factory()->make(['role' => 'supplier_admin'])))->toBeTrue()
+        ->and($policy->viewAny(User::factory()->make(['role' => 'supplier_reservations'])))->toBeTrue()
+        ->and($policy->viewAny(User::factory()->make(['role' => 'supplier_pricing'])))->toBeFalse();
+});
+
 test('only platform roles can view audit logs', function () {
-    $policy = new AuditLogPolicy();
+    $policy = new AuditLogPolicy;
     $auditLog = AuditLog::factory()->make();
 
     expect($policy->viewAny(User::factory()->make(['role' => 'super_admin'])))->toBeTrue()

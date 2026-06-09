@@ -18,10 +18,10 @@ test('home redirects authenticated admin users to admin dashboard', function () 
     $this->assertAuthenticatedAs($user);
 });
 
-test('home redirects authenticated supplier users to supplier dashboard', function () {
+test('home redirects authenticated supplier users to supplier dashboard', function (string $role) {
     $supplier = Supplier::factory()->create();
     $user = User::factory()->create([
-        'role' => 'supplier_user',
+        'role' => $role,
         'supplier_id' => $supplier->id,
     ]);
 
@@ -30,4 +30,4 @@ test('home redirects authenticated supplier users to supplier dashboard', functi
         ->assertRedirect(route('supplier.dashboard'));
 
     $this->assertAuthenticatedAs($user);
-});
+})->with(['supplier_admin', 'supplier_reservations', 'supplier_pricing', 'supplier_user']);

@@ -17,7 +17,7 @@ trait RedirectsToPortalPanel
             return '/';
         }
 
-        if (in_array($user->role, ['supplier_admin', 'supplier_user'], true)) {
+        if (in_array($user->role, ['supplier_admin', 'supplier_reservations', 'supplier_pricing', 'supplier_user'], true)) {
             return route('supplier.dashboard', absolute: false);
         }
 

@@ -7,22 +7,20 @@ use App\Concerns\HasTeams;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
-use Laravel\Fortify\Contracts\PasskeyUser;
-use Laravel\Fortify\PasskeyAuthenticatable;
-use Laravel\Fortify\TwoFactorAuthenticatable;
 
-#[Fillable(['name', 'email', 'password', 'current_team_id', 'supplier_id', 'role', 'status'])]
-#[Hidden(['password', 'two_factor_secret', 'two_factor_recovery_codes', 'remember_token'])]
-class User extends Authenticatable implements PasskeyUser
+#[Fillable(['name', 'username', 'email', 'password', 'current_team_id', 'supplier_id', 'role', 'status'])]
+#[Hidden(['password', 'remember_token'])]
+class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, HasTeams, Notifiable, PasskeyAuthenticatable, TwoFactorAuthenticatable;
+    use HasFactory, HasTeams, Notifiable;
 
     /**
      * Bootstrap the model and its traits.
@@ -34,6 +32,20 @@ class User extends Authenticatable implements PasskeyUser
         static::creating(function (User $user) {
             if (empty($user->uuid)) {
                 $user->uuid = (string) Str::uuid();
+            }
+
+            if (empty($user->username)) {
+                $user->username = Str::of((string) Str::before($user->email, '@'))
+                    ->lower()
+                    ->replaceMatches('/[^a-z0-9._-]+/', '-')
+                    ->trim('-._')
+                    ->value();
+            }
+        });
+
+        static::saving(function (User $user): void {
+            if ($user->username !== null) {
+                $user->username = Str::lower($user->username);
             }
         });
 
@@ -66,8 +78,6 @@ class User extends Authenticatable implements PasskeyUser
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
-            'two_factor_confirmed_at' => 'datetime',
-            'two_factor_enabled' => 'boolean',
             'last_login_at' => 'datetime',
         ];
     }
@@ -87,8 +97,8 @@ class User extends Authenticatable implements PasskeyUser
     /**
      * Scope a query to only include active users.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<User>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<User>
+     * @param  Builder<User>  $query
+     * @return Builder<User>
      */
     public function scopeActive($query)
     {
@@ -98,8 +108,8 @@ class User extends Authenticatable implements PasskeyUser
     /**
      * Scope a query to only include users for a given supplier.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<User>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<User>
+     * @param  Builder<User>  $query
+     * @return Builder<User>
      */
     public function scopeForSupplier($query, ?int $supplierId)
     {
@@ -113,13 +123,14 @@ class User extends Authenticatable implements PasskeyUser
     /**
      * Scope a query to filter by name, email or role.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<User>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<User>
+     * @param  Builder<User>  $query
+     * @return Builder<User>
      */
     public function scopeSearch($query, string $term)
     {
         return $query->where(function ($query) use ($term) {
             $query->where('name', 'like', "%{$term}%")
+                ->orWhere('username', 'like', "%{$term}%")
                 ->orWhere('email', 'like', "%{$term}%")
                 ->orWhere('role', 'like', "%{$term}%");
         });

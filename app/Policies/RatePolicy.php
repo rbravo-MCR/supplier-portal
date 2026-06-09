@@ -21,6 +21,7 @@ class RatePolicy
      */
     private const SUPPLIER_WRITE_ROLES = [
         'supplier_admin',
+        'supplier_pricing',
     ];
 
     /**

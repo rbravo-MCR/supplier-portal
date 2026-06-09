@@ -42,6 +42,30 @@ test('location catalog stores countries cities zones and offices', function () {
         ->and($office->zone->city->country->is($country))->toBeTrue();
 });
 
+test('location catalog search ignores accents', function () {
+    if (DB::getDriverName() !== 'pgsql') {
+        $this->markTestSkipped('Accent-insensitive search uses PostgreSQL unaccent.');
+    }
+
+    $country = Country::factory()->create([
+        'name' => 'México',
+        'iso2' => 'MX',
+        'iso3' => 'MEX',
+    ]);
+    $city = City::factory()->for($country)->create([
+        'name' => 'Cancún',
+        'code' => 'CUN',
+    ]);
+    Zone::factory()->for($city)->create([
+        'name' => 'Zona Hotelera Cancún',
+        'code' => 'ZH',
+    ]);
+
+    expect(Country::query()->search('Mexico')->pluck('name')->all())->toBe(['México'])
+        ->and(City::query()->search('Cancun')->pluck('name')->all())->toBe(['Cancún'])
+        ->and(Zone::query()->search('Cancun')->pluck('name')->all())->toBe(['Zona Hotelera Cancún']);
+});
+
 test('vehicle availability can resolve a supplier office by iata', function () {
     config(['services.supplier_service.token' => 'test-token']);
 

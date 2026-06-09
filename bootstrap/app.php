@@ -17,6 +17,16 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->redirectUsersTo(function (Request $request): string {
+            $user = $request->user();
+
+            if ($user && in_array($user->role, ['supplier_admin', 'supplier_reservations', 'supplier_pricing', 'supplier_user'], true)) {
+                return route('supplier.dashboard');
+            }
+
+            return route('admin.dashboard');
+        });
+
         $middleware->web(prepend: [
             EnsurePrimaryDatabaseIsAvailable::class,
         ]);
@@ -30,7 +40,7 @@ return Application::configure(basePath: dirname(__DIR__))
             fn (Request $request) => $request->is('api/*'),
         );
 
-        $exceptions->render(function (\Throwable $exception, Request $request): ?Response {
+        $exceptions->render(function (Throwable $exception, Request $request): ?Response {
             if (config('app.debug')) {
                 return null;
             }

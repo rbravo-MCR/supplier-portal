@@ -21,11 +21,13 @@ new #[Title('Usuarios')] class extends Component {
 
     public string $name = '';
 
+    public string $username = '';
+
     public string $email = '';
 
     public string $password = '';
 
-    public string $role = 'supplier_user';
+    public string $role = 'supplier_reservations';
 
     public string $status = 'active';
 
@@ -46,17 +48,29 @@ new #[Title('Usuarios')] class extends Component {
         $validated = $this->validate([
             'supplierId' => ['nullable', 'integer', Rule::exists('suppliers', 'id')],
             'name' => ['required', 'string', 'max:255'],
+            'username' => ['required', 'string', 'lowercase', 'alpha_dash:ascii', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'string', 'min:8', 'max:255'],
-            'role' => ['required', Rule::in(['admin', 'supplier_admin', 'supplier_user'])],
+            'role' => ['required', Rule::in(['admin', 'supplier_admin', 'supplier_reservations', 'supplier_pricing'])],
             'status' => ['required', Rule::in(['active', 'inactive'])],
         ]);
 
         $supplierId = Auth::user()->supplier_id ?: $validated['supplierId'];
 
+        validator($validated, [
+            'username' => [
+                Rule::unique('users', 'username')->where(
+                    fn ($query) => $supplierId
+                        ? $query->where('supplier_id', $supplierId)
+                        : $query->whereNull('supplier_id')
+                ),
+            ],
+        ])->validate();
+
         User::query()->create([
             'supplier_id' => $supplierId,
             'name' => $validated['name'],
+            'username' => str($validated['username'])->lower()->toString(),
             'email' => str($validated['email'])->lower()->toString(),
             'email_verified_at' => now(),
             'password' => $validated['password'],
@@ -64,8 +78,8 @@ new #[Title('Usuarios')] class extends Component {
             'status' => $validated['status'],
         ]);
 
-        $this->reset(['name', 'email', 'password']);
-        $this->role = 'supplier_user';
+        $this->reset(['name', 'username', 'email', 'password']);
+        $this->role = 'supplier_reservations';
         $this->status = 'active';
         $this->resetPage();
 
@@ -113,12 +127,13 @@ new #[Title('Usuarios')] class extends Component {
     <form wire:submit="save" class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <flux:input wire:model="name" :label="__('Nombre')" placeholder="María López" data-test="user-name" />
+            <flux:input wire:model="username" :label="__('Usuario')" placeholder="usuario" data-test="user-username" />
             <flux:input wire:model="email" :label="__('Correo')" type="email" placeholder="maria@proveedor.com" data-test="user-email" />
             <flux:input wire:model="password" :label="__('Contraseña temporal')" type="password" data-test="user-password" />
 
             @if (! Auth::user()->supplier_id)
                 <flux:select wire:model="supplierId" :label="__('Proveedor')" data-test="user-supplier">
-                    <flux:select.option value="">{{ __('Sin proveedor') }}</flux:select.option>
+                    <flux:select.option value="">{{ __('Administración plataforma') }}</flux:select.option>
                     @foreach ($this->suppliers as $supplier)
                         <flux:select.option :value="$supplier->id">{{ $supplier->name }} · {{ $supplier->code }}</flux:select.option>
                     @endforeach
@@ -126,9 +141,12 @@ new #[Title('Usuarios')] class extends Component {
             @endif
 
             <flux:select wire:model="role" :label="__('Rol')" data-test="user-role">
-                <flux:select.option value="admin">{{ __('Administrador') }}</flux:select.option>
-                <flux:select.option value="supplier_admin">{{ __('Admin proveedor') }}</flux:select.option>
-                <flux:select.option value="supplier_user">{{ __('Usuario proveedor') }}</flux:select.option>
+                @if (! Auth::user()->supplier_id)
+                    <flux:select.option value="admin">{{ __('Administrador plataforma') }}</flux:select.option>
+                @endif
+                <flux:select.option value="supplier_admin">{{ __('Administrador') }}</flux:select.option>
+                <flux:select.option value="supplier_reservations">{{ __('Reservas') }}</flux:select.option>
+                <flux:select.option value="supplier_pricing">{{ __('Precios') }}</flux:select.option>
             </flux:select>
 
             <flux:select wire:model="status" :label="__('Estado')" data-test="user-status">
@@ -157,11 +175,11 @@ new #[Title('Usuarios')] class extends Component {
         <flux:table :paginate="$this->users">
             <flux:table.columns>
                 <flux:table.column>{{ __('Nombre') }}</flux:table.column>
+                <flux:table.column>{{ __('Usuario') }}</flux:table.column>
                 <flux:table.column>{{ __('Correo') }}</flux:table.column>
                 <flux:table.column>{{ __('Proveedor') }}</flux:table.column>
                 <flux:table.column>{{ __('Rol') }}</flux:table.column>
                 <flux:table.column>{{ __('Estado') }}</flux:table.column>
-                <flux:table.column>{{ __('2FA') }}</flux:table.column>
                 <flux:table.column>{{ __('Último acceso') }}</flux:table.column>
             </flux:table.columns>
 
@@ -169,25 +187,23 @@ new #[Title('Usuarios')] class extends Component {
                 @forelse ($this->users as $user)
                     <flux:table.row :key="$user->id">
                         <flux:table.cell variant="strong">{{ $user->name }}</flux:table.cell>
+                        <flux:table.cell>{{ $user->username }}</flux:table.cell>
                         <flux:table.cell>{{ $user->email }}</flux:table.cell>
-                        <flux:table.cell>{{ $user->supplier?->code ?? '-' }}</flux:table.cell>
+                        <flux:table.cell>{{ $user->supplier?->code ?? __('Plataforma') }}</flux:table.cell>
                         <flux:table.cell>
                             <flux:badge :color="$user->role === 'admin' ? 'blue' : 'zinc'">
                                 {{ match ($user->role) {
-                                    'admin' => __('Administrador'),
-                                    'supplier_admin' => __('Admin proveedor'),
-                                    default => __('Usuario proveedor'),
+                                    'admin' => __('Administrador plataforma'),
+                                    'supplier_admin' => __('Administrador'),
+                                    'supplier_pricing' => __('Precios'),
+                                    'supplier_reservations', 'supplier_user' => __('Reservas'),
+                                    default => $user->role,
                                 } }}
                             </flux:badge>
                         </flux:table.cell>
                         <flux:table.cell>
                             <flux:badge :color="$user->status === 'active' ? 'green' : 'zinc'">
                                 {{ $user->status === 'active' ? __('Activo') : __('Inactivo') }}
-                            </flux:badge>
-                        </flux:table.cell>
-                        <flux:table.cell>
-                            <flux:badge :color="$user->two_factor_enabled ? 'green' : 'zinc'">
-                                {{ $user->two_factor_enabled ? __('Activo') : __('No') }}
                             </flux:badge>
                         </flux:table.cell>
                         <flux:table.cell>{{ $user->last_login_at?->diffForHumans() ?? '-' }}</flux:table.cell>

@@ -28,12 +28,14 @@ class CreateNewUser implements CreatesNewUsers
     {
         Validator::make($input, [
             ...$this->profileRules(),
+            'username' => ['required', 'string', 'lowercase', 'alpha_dash:ascii', 'max:255', 'unique:users,username'],
             'password' => $this->passwordRules(),
         ])->validate();
 
         return DB::transaction(function () use ($input) {
             $user = User::create([
                 'name' => $input['name'],
+                'username' => $input['username'],
                 'email' => $input['email'],
                 'password' => $input['password'],
                 'role' => 'admin',

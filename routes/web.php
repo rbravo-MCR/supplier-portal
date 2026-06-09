@@ -12,7 +12,7 @@ Route::get('/', function () {
         return to_route('login');
     }
 
-    if (in_array(Auth::user()->role, ['supplier_admin', 'supplier_user'], true)) {
+    if (in_array(Auth::user()->role, ['supplier_admin', 'supplier_reservations', 'supplier_pricing', 'supplier_user'], true)) {
         return to_route('supplier.dashboard');
     }
 

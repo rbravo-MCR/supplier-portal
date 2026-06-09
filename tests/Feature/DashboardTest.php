@@ -26,6 +26,24 @@ test('authenticated users can visit the dashboard', function () {
         ->assertSee('Trabajando, leyendo datos...');
 });
 
+test('supplier users without a current team can visit the supplier dashboard', function () {
+    $supplier = Supplier::factory()->create();
+    $user = User::factory()->create([
+        'role' => 'supplier_admin',
+        'supplier_id' => $supplier->id,
+    ]);
+
+    $user->update(['current_team_id' => null]);
+
+    $response = $this
+        ->actingAs($user->fresh())
+        ->get(route('supplier.dashboard'));
+
+    $response
+        ->assertOk()
+        ->assertSee('Trabajando, leyendo datos...');
+});
+
 test('dashboard shows booking status bars for the selected date range', function () {
     $supplier = Supplier::factory()->create();
     $user = User::factory()->create([

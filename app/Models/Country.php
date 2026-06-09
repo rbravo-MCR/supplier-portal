@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\CountryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -71,8 +72,8 @@ class Country extends Model
     /**
      * Scope a query to only include active countries.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Country>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<Country>
+     * @param  Builder<Country>  $query
+     * @return Builder<Country>
      */
     public function scopeActive($query)
     {
@@ -82,17 +83,22 @@ class Country extends Model
     /**
      * Scope a query to filter by name, iso2 or iso3.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Country>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<Country>
+     * @param  Builder<Country>  $query
+     * @return Builder<Country>
      */
     public function scopeSearch($query, string $term)
     {
-        $term = str($term)->upper()->toString();
+        $upper = str($term)->upper()->toString();
+        $isPostgres = $query->getConnection()->getDriverName() === 'pgsql';
+        $op = $isPostgres ? 'ilike' : 'like';
 
-        return $query->where(function ($query) use ($term) {
-            $query->where('name', 'like', "%{$term}%")
-                ->orWhere('iso2', 'like', "%{$term}%")
-                ->orWhere('iso3', 'like', "%{$term}%");
+        return $query->where(function ($query) use ($term, $upper, $op, $isPostgres) {
+            $query->when(
+                $isPostgres,
+                fn (Builder $query): Builder => $query->whereRaw('immutable_unaccent(name) ILIKE immutable_unaccent(?)', ["%{$term}%"]),
+                fn (Builder $query): Builder => $query->where('name', $op, "%{$term}%"),
+            )->orWhere('iso2', 'like', "{$upper}%")
+                ->orWhere('iso3', 'like', "{$upper}%");
         });
     }
 }

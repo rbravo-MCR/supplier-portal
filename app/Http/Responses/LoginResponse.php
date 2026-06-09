@@ -14,7 +14,7 @@ class LoginResponse implements LoginResponseContract
     public function toResponse($request): Response
     {
         return $request->wantsJson()
-            ? new JsonResponse(['two_factor' => false], 200)
+            ? new JsonResponse(['redirect' => $this->redirectPathForPortalPanel($request)], 200)
             : redirect()->intended($this->redirectPathForPortalPanel($request));
     }
 }

@@ -15,6 +15,7 @@ The platform centralizes manual supplier operations, Excel-based uploads, tracea
 - Pest 4
 - Tailwind CSS 4
 - Vite
+- PostgreSQL with `pg_trgm` and `unaccent` for location catalog search
 
 ## Setup
 
@@ -68,6 +69,34 @@ Run the Composer CI check:
 ```bash
 composer run ci:check
 ```
+
+## Authentication
+
+Access is handled by Laravel Fortify with username and password authentication.
+
+The login form accepts:
+
+- `Proveedor`: optional. Select it for supplier users.
+- `Usuario`: the account username.
+- `Contraseña`: the account password.
+
+Platform administrators do not belong to a supplier. They can leave `Proveedor` empty and are redirected to the platform dashboard after login.
+
+Supplier users are resolved by the combination of selected supplier and username, allowing the same username to exist under different suppliers.
+
+Two-factor authentication and passkeys have been removed from the application and database schema.
+
+## Location Catalog Search
+
+Country, city, and zone lookups use the database-backed search scopes in the Eloquent models.
+
+On PostgreSQL, migrations enable:
+
+- `pg_trgm`
+- `unaccent`
+- trigram GIN indexes for `countries.name`, `cities.name`, and `zones.name`
+
+This makes partial searches fast and accent-insensitive, so searches such as `Mexico` can match `México`, and `Cancun` can match `Cancún`.
 
 ## Vehicle Category Catalog
 

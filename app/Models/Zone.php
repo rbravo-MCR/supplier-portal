@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\ZoneFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -78,8 +79,8 @@ class Zone extends Model
     /**
      * Scope a query to only include active zones.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Zone>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<Zone>
+     * @param  Builder<Zone>  $query
+     * @return Builder<Zone>
      */
     public function scopeActive($query)
     {
@@ -89,8 +90,8 @@ class Zone extends Model
     /**
      * Scope a query to only include zones for a given city.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Zone>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<Zone>
+     * @param  Builder<Zone>  $query
+     * @return Builder<Zone>
      */
     public function scopeForCity($query, ?int $cityId)
     {
@@ -104,8 +105,8 @@ class Zone extends Model
     /**
      * Scope a query to only include zones for cities in a given country.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Zone>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<Zone>
+     * @param  Builder<Zone>  $query
+     * @return Builder<Zone>
      */
     public function scopeForCountry($query, ?int $countryId)
     {
@@ -122,16 +123,20 @@ class Zone extends Model
     /**
      * Scope a query to filter by name or code.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Zone>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<Zone>
+     * @param  Builder<Zone>  $query
+     * @return Builder<Zone>
      */
     public function scopeSearch($query, string $term)
     {
-        $term = str($term)->upper()->toString();
+        $isPostgres = $query->getConnection()->getDriverName() === 'pgsql';
+        $op = $isPostgres ? 'ilike' : 'like';
 
-        return $query->where(function ($query) use ($term) {
-            $query->where('name', 'like', "%{$term}%")
-                ->orWhere('code', 'like', "%{$term}%");
+        return $query->where(function ($query) use ($term, $op, $isPostgres) {
+            $query->when(
+                $isPostgres,
+                fn (Builder $query): Builder => $query->whereRaw('immutable_unaccent(name) ILIKE immutable_unaccent(?)', ["%{$term}%"]),
+                fn (Builder $query): Builder => $query->where('name', $op, "%{$term}%"),
+            )->orWhere('code', $op, "{$term}%");
         });
     }
 }

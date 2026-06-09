@@ -21,6 +21,7 @@ class BookingPolicy
      */
     private const SUPPLIER_ROLES = [
         'supplier_admin',
+        'supplier_reservations',
         'supplier_user',
     ];
 

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\CityFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -76,8 +77,8 @@ class City extends Model
     /**
      * Scope a query to only include active cities.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<City>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<City>
+     * @param  Builder<City>  $query
+     * @return Builder<City>
      */
     public function scopeActive($query)
     {
@@ -87,8 +88,8 @@ class City extends Model
     /**
      * Scope a query to only include cities for a given country.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<City>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<City>
+     * @param  Builder<City>  $query
+     * @return Builder<City>
      */
     public function scopeForCountry($query, ?int $countryId)
     {
@@ -102,16 +103,20 @@ class City extends Model
     /**
      * Scope a query to filter by name or code.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<City>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<City>
+     * @param  Builder<City>  $query
+     * @return Builder<City>
      */
     public function scopeSearch($query, string $term)
     {
-        $term = str($term)->upper()->toString();
+        $isPostgres = $query->getConnection()->getDriverName() === 'pgsql';
+        $op = $isPostgres ? 'ilike' : 'like';
 
-        return $query->where(function ($query) use ($term) {
-            $query->where('name', 'like', "%{$term}%")
-                ->orWhere('code', 'like', "%{$term}%");
+        return $query->where(function ($query) use ($term, $op, $isPostgres) {
+            $query->when(
+                $isPostgres,
+                fn (Builder $query): Builder => $query->whereRaw('immutable_unaccent(name) ILIKE immutable_unaccent(?)', ["%{$term}%"]),
+                fn (Builder $query): Builder => $query->where('name', $op, "%{$term}%"),
+            )->orWhere('code', $op, "{$term}%");
         });
     }
 }

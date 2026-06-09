@@ -16,10 +16,20 @@
             }
         </style>
     </head>
+    @php
+        $user = auth()->user();
+        $supplierRoles = ['supplier_admin', 'supplier_reservations', 'supplier_pricing', 'supplier_user'];
+        $dashboardRouteName = $user?->currentTeam
+            ? 'dashboard'
+            : (in_array($user?->role, $supplierRoles, true) ? 'supplier.dashboard' : 'admin.dashboard');
+        $dashboardHref = route($dashboardRouteName);
+        $dashboardIsCurrent = request()->routeIs('dashboard', 'supplier.dashboard', 'admin.dashboard');
+    @endphp
+
     <body class="min-h-screen bg-white dark:bg-zinc-800">
         <flux:sidebar sticky collapsible="mobile" class="border-e border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900">
             <flux:sidebar.header>
-                <x-app-logo :sidebar="true" href="{{ route('dashboard') }}" wire:navigate />
+                <x-app-logo :sidebar="true" href="{{ $dashboardHref }}" wire:navigate />
                 <flux:sidebar.collapse class="lg:hidden" />
             </flux:sidebar.header>
 
@@ -27,7 +37,7 @@
 
             <flux:sidebar.nav>
                 <flux:sidebar.group :heading="__('Operación')" class="grid">
-                    <flux:sidebar.item icon="home" :href="route('dashboard')" :current="request()->routeIs('dashboard')" wire:navigate>
+                    <flux:sidebar.item icon="home" :href="$dashboardHref" :current="$dashboardIsCurrent" wire:navigate>
                         {{ __('Dashboard') }}
                     </flux:sidebar.item>
                     <flux:sidebar.item icon="clipboard-document-list" :href="route('portal.bookings')" :current="request()->routeIs('portal.bookings')" wire:navigate>

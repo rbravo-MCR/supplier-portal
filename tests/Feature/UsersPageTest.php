@@ -12,6 +12,7 @@ test('users page displays portal users', function () {
     User::factory()->create([
         'supplier_id' => $supplier->id,
         'name' => 'María López',
+        'username' => 'mlopez',
         'email' => 'maria@example.test',
         'role' => 'supplier_admin',
     ]);
@@ -21,9 +22,10 @@ test('users page displays portal users', function () {
         ->assertOk()
         ->assertSee('Directorio de usuarios')
         ->assertSee('María López')
+        ->assertSee('mlopez')
         ->assertSee('maria@example.test')
         ->assertSee('DEMO')
-        ->assertSee('Admin proveedor');
+        ->assertSee('Administrador');
 });
 
 test('users form creates a portal user', function () {
@@ -34,19 +36,22 @@ test('users form creates a portal user', function () {
         ->test('pages::users')
         ->set('supplierId', $supplier->id)
         ->set('name', 'Carlos Pérez')
+        ->set('username', 'cperez')
         ->set('email', 'carlos@example.test')
         ->set('password', 'temporary-password')
-        ->set('role', 'supplier_user')
+        ->set('role', 'supplier_pricing')
         ->call('save')
         ->assertHasNoErrors()
         ->assertSee('Carlos Pérez')
+        ->assertSee('cperez')
         ->assertSee('carlos@example.test');
 
     $this->assertDatabaseHas('users', [
         'supplier_id' => $supplier->id,
         'name' => 'Carlos Pérez',
+        'username' => 'cperez',
         'email' => 'carlos@example.test',
-        'role' => 'supplier_user',
+        'role' => 'supplier_pricing',
         'status' => 'active',
     ]);
 });
