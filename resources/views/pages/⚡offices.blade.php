@@ -207,7 +207,7 @@ new #[Title('Oficinas')] class extends Component {
     private function rememberCatalog(string $key, string $search, string $modelClass, \Closure $callback): Collection
     {
         if ($search !== '') {
-            return $callback();
+            return $this->rememberModels("{$key}.q.".md5($search), $modelClass, $callback, 60);
         }
 
         return $this->rememberModels($key, $modelClass, $callback);
@@ -227,7 +227,7 @@ new #[Title('Oficinas')] class extends Component {
                     $query->search($this->countrySearch);
                 })
                 ->orderBy('name')
-                ->limit(30)
+                ->limit(50)
                 ->get();
         });
     }
@@ -252,7 +252,7 @@ new #[Title('Oficinas')] class extends Component {
     #[Computed]
     public function filterCountries(): Collection
     {
-        return $this->rememberCatalog('filter.countries.active', $this->filterCountrySearch, Country::class, function () {
+        return $this->rememberCatalog('countries.active', $this->filterCountrySearch, Country::class, function () {
             return Country::query()
                 ->select(['id', 'name', 'iso2'])
                 ->active()
@@ -260,7 +260,7 @@ new #[Title('Oficinas')] class extends Component {
                     $query->search($this->filterCountrySearch);
                 })
                 ->orderBy('name')
-                ->limit(30)
+                ->limit(50)
                 ->get();
         });
     }
@@ -288,12 +288,13 @@ new #[Title('Oficinas')] class extends Component {
         return $this->rememberCatalog("cities.active.{$this->countryId}", $this->citySearch, City::class, function () {
             return City::query()
                 ->select(['id', 'country_id', 'name', 'code'])
+                ->active()
                 ->forCountry($this->countryId)
                 ->when($this->citySearch !== '', function (Builder $query): void {
                     $query->search($this->citySearch);
                 })
                 ->orderBy('name')
-                ->limit(30)
+                ->limit(50)
                 ->get();
         });
     }
@@ -320,6 +321,7 @@ new #[Title('Oficinas')] class extends Component {
         return $this->rememberCatalog("zones.active.{$this->countryId}.{$this->cityId}", $this->zoneSearch, Zone::class, function () {
             return Zone::query()
                 ->select(['id', 'city_id', 'name', 'code'])
+                ->active()
                 ->forCity($this->cityId)
                 ->when(! $this->cityId && $this->countryId, function (Builder $query): void {
                     $query->forCountry($this->countryId);
@@ -328,7 +330,7 @@ new #[Title('Oficinas')] class extends Component {
                     $query->search($this->zoneSearch);
                 })
                 ->orderBy('name')
-                ->limit(30)
+                ->limit(50)
                 ->get();
         });
     }
@@ -352,15 +354,16 @@ new #[Title('Oficinas')] class extends Component {
     #[Computed]
     public function filterCities(): Collection
     {
-        return $this->rememberCatalog("filter.cities.{$this->filterCountryId}", $this->filterCitySearch, City::class, function () {
+        return $this->rememberCatalog("cities.active.{$this->filterCountryId}", $this->filterCitySearch, City::class, function () {
             return City::query()
                 ->select(['id', 'country_id', 'name', 'code'])
+                ->active()
                 ->forCountry($this->filterCountryId)
                 ->when($this->filterCitySearch !== '', function (Builder $query): void {
                     $query->search($this->filterCitySearch);
                 })
                 ->orderBy('name')
-                ->limit(30)
+                ->limit(50)
                 ->get();
         });
     }
@@ -384,9 +387,10 @@ new #[Title('Oficinas')] class extends Component {
     #[Computed]
     public function filterZones(): Collection
     {
-        return $this->rememberCatalog("filter.zones.{$this->filterCountryId}.{$this->filterCityId}", $this->filterZoneSearch, Zone::class, function () {
+        return $this->rememberCatalog("zones.active.{$this->filterCountryId}.{$this->filterCityId}", $this->filterZoneSearch, Zone::class, function () {
             return Zone::query()
                 ->select(['id', 'city_id', 'name', 'code'])
+                ->active()
                 ->forCity($this->filterCityId)
                 ->when(! $this->filterCityId && $this->filterCountryId, function (Builder $query): void {
                     $query->forCountry($this->filterCountryId);
@@ -395,7 +399,7 @@ new #[Title('Oficinas')] class extends Component {
                     $query->search($this->filterZoneSearch);
                 })
                 ->orderBy('name')
-                ->limit(30)
+                ->limit(50)
                 ->get();
         });
     }
@@ -426,9 +430,12 @@ new #[Title('Oficinas')] class extends Component {
     #[Computed]
     public function selectedCountryIso2(): ?string
     {
-        return Cache::remember("selected.country.iso2.{$this->countryId}", 3600, function (): ?string {
-            return $this->countryId ? Country::query()->whereKey($this->countryId)->value('iso2') : null;
-        });
+        if (! $this->countryId) {
+            return null;
+        }
+
+        return $this->countries->firstWhere('id', $this->countryId)?->iso2
+            ?? Cache::remember("selected.country.iso2.{$this->countryId}", 3600, fn (): ?string => Country::query()->whereKey($this->countryId)->value('iso2'));
     }
 
     #[Computed]
@@ -464,9 +471,12 @@ new #[Title('Oficinas')] class extends Component {
     #[Computed]
     public function selectedFilterCountryIso2(): ?string
     {
-        return Cache::remember("selected.filter.country.iso2.{$this->filterCountryId}", 3600, function (): ?string {
-            return $this->filterCountryId ? Country::query()->whereKey($this->filterCountryId)->value('iso2') : null;
-        });
+        if (! $this->filterCountryId) {
+            return null;
+        }
+
+        return $this->filterCountries->firstWhere('id', $this->filterCountryId)?->iso2
+            ?? Cache::remember("selected.filter.country.iso2.{$this->filterCountryId}", 3600, fn (): ?string => Country::query()->whereKey($this->filterCountryId)->value('iso2'));
     }
 
     #[Computed]
@@ -523,13 +533,10 @@ new #[Title('Oficinas')] class extends Component {
                 );
             })
             ->when($this->filterCountryId, function (Builder $query): void {
-                $cityIds = City::query()
-                    ->select('id')
-                    ->where('country_id', $this->filterCountryId);
-
                 $query->whereIn('zone_id', Zone::query()
-                    ->select('id')
-                    ->whereIn('city_id', $cityIds)
+                    ->select('zones.id')
+                    ->join('cities', 'cities.id', '=', 'zones.city_id')
+                    ->where('cities.country_id', $this->filterCountryId)
                 );
             })
             ->when($this->search !== '', function (Builder $query): void {
