@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\OfficeFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -85,8 +86,8 @@ class Office extends Model
     /**
      * Scope a query to only include active offices.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Office>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<Office>
+     * @param  Builder<Office>  $query
+     * @return Builder<Office>
      */
     public function scopeActive($query)
     {
@@ -96,8 +97,8 @@ class Office extends Model
     /**
      * Scope a query to only include offices for a given supplier.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Office>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<Office>
+     * @param  Builder<Office>  $query
+     * @return Builder<Office>
      */
     public function scopeForSupplier($query, ?int $supplierId)
     {
@@ -111,17 +112,18 @@ class Office extends Model
     /**
      * Scope a query to filter by name or code.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Office>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<Office>
+     * @param  Builder<Office>  $query
+     * @return Builder<Office>
      */
     public function scopeSearch($query, string $term)
     {
-        $term = str($term)->upper()->toString();
+        $op = $query->getConnection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
+        $upper = str($term)->upper()->toString();
 
-        return $query->where(function ($query) use ($term) {
-            $query->where('name', 'like', "%{$term}%")
-                ->orWhere('code', 'like', "%{$term}%")
-                ->orWhere('iata_code', 'like', "%{$term}%");
+        return $query->where(function ($query) use ($term, $upper, $op) {
+            $query->where('name', $op, "%{$term}%")
+                ->orWhere('code', 'like', "{$upper}%")
+                ->orWhere('iata_code', 'like', "{$upper}%");
         });
     }
 }

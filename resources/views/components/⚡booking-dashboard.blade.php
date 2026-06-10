@@ -28,46 +28,51 @@ new class extends Component {
     #[Computed]
     public function statusBars(): array
     {
-        $counts = $this->bookingQuery()
-            ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count")
-            ->selectRaw("SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed_count")
-            ->selectRaw("SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count")
-            ->first();
+        $supplierId = Auth::user()->supplier_id;
+        $cacheKey = "dashboard.statusBars.{$supplierId}.{$this->startDate}.{$this->endDate}";
 
-        $values = [
-            'pending' => (int) ($counts?->pending_count ?? 0),
-            'confirmed' => (int) ($counts?->confirmed_count ?? 0),
-            'cancelled' => (int) ($counts?->cancelled_count ?? 0),
-        ];
+        return cache()->remember($cacheKey, 60, function (): array {
+            $counts = $this->bookingQuery()
+                ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as pending_count")
+                ->selectRaw("SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as confirmed_count")
+                ->selectRaw("SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_count")
+                ->first();
 
-        $max = max(max($values), 1);
+            $values = [
+                'pending' => (int) ($counts?->pending_count ?? 0),
+                'confirmed' => (int) ($counts?->confirmed_count ?? 0),
+                'cancelled' => (int) ($counts?->cancelled_count ?? 0),
+            ];
 
-        return [
-            [
-                'key' => 'pending',
-                'label' => __('Pendientes'),
-                'count' => $values['pending'],
-                'percent' => (int) round(($values['pending'] / $max) * 100),
-                'bar' => 'bg-amber-500',
-                'text' => 'text-amber-700 dark:text-amber-300',
-            ],
-            [
-                'key' => 'confirmed',
-                'label' => __('Confirmadas'),
-                'count' => $values['confirmed'],
-                'percent' => (int) round(($values['confirmed'] / $max) * 100),
-                'bar' => 'bg-emerald-500',
-                'text' => 'text-emerald-700 dark:text-emerald-300',
-            ],
-            [
-                'key' => 'cancelled',
-                'label' => __('Canceladas'),
-                'count' => $values['cancelled'],
-                'percent' => (int) round(($values['cancelled'] / $max) * 100),
-                'bar' => 'bg-rose-500',
-                'text' => 'text-rose-700 dark:text-rose-300',
-            ],
-        ];
+            $max = max(max($values), 1);
+
+            return [
+                [
+                    'key' => 'pending',
+                    'label' => __('Pendientes'),
+                    'count' => $values['pending'],
+                    'percent' => (int) round(($values['pending'] / $max) * 100),
+                    'bar' => 'bg-amber-500',
+                    'text' => 'text-amber-700 dark:text-amber-300',
+                ],
+                [
+                    'key' => 'confirmed',
+                    'label' => __('Confirmadas'),
+                    'count' => $values['confirmed'],
+                    'percent' => (int) round(($values['confirmed'] / $max) * 100),
+                    'bar' => 'bg-emerald-500',
+                    'text' => 'text-emerald-700 dark:text-emerald-300',
+                ],
+                [
+                    'key' => 'cancelled',
+                    'label' => __('Canceladas'),
+                    'count' => $values['cancelled'],
+                    'percent' => (int) round(($values['cancelled'] / $max) * 100),
+                    'bar' => 'bg-rose-500',
+                    'text' => 'text-rose-700 dark:text-rose-300',
+                ],
+            ];
+        });
     }
 
     #[Computed]

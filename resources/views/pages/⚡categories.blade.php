@@ -2,6 +2,8 @@
 
 use App\Models\Supplier;
 use App\Models\VehicleCategory;
+use App\Models\VehicleCategoryAcrissCode;
+use App\Models\VehicleCategoryCatalog;
 use Flux\Flux;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -18,11 +20,11 @@ new #[Title('Categorías')] class extends Component {
 
     public ?int $supplierId = null;
 
-    public string $name = '';
+    public ?int $vehicleCategoryCatalogId = null;
 
-    public string $code = '';
+    public string $supplierCode = '';
 
-    public string $acrissPrefix = '';
+    public string $acrissCode = '';
 
     public string $description = '';
 
@@ -40,34 +42,64 @@ new #[Title('Categorías')] class extends Component {
         $this->resetPage();
     }
 
+    public function updatedVehicleCategoryCatalogId(): void
+    {
+        $this->acrissCode = '';
+    }
+
     public function save(): void
     {
-        $validated = $this->validate([
-            'supplierId' => ['required', 'integer', Rule::exists('suppliers', 'id')],
-            'name' => ['required', 'string', 'max:100'],
-            'code' => [
+        $supplierId = Auth::user()->supplier_id ?: $this->supplierId;
+        $acrissRules = ['nullable', 'string', 'max:4'];
+
+        if ($this->selectedCatalog()?->acrissCodes()->exists()) {
+            $acrissRules = [
                 'required',
                 'string',
-                'max:30',
-                Rule::unique('vehicle_categories', 'code')->where('supplier_id', $this->supplierId),
+                'max:4',
+                Rule::exists('vehicle_category_acriss_codes', 'code')
+                    ->where(fn ($query) => $query->where('vehicle_category_catalog_id', $this->vehicleCategoryCatalogId)),
+            ];
+        }
+
+        $validated = $this->validate([
+            'supplierId' => ['nullable', 'integer', Rule::exists('suppliers', 'id')],
+            'vehicleCategoryCatalogId' => [
+                'required',
+                'integer',
+                Rule::exists('vehicle_category_catalogs', 'id')->where('status', 'active'),
+                Rule::unique('vehicle_categories', 'vehicle_category_catalog_id')->where('supplier_id', $supplierId),
             ],
-            'acrissPrefix' => ['nullable', 'string', 'max:4'],
+            'supplierCode' => ['nullable', 'string', 'max:30'],
+            'acrissCode' => $acrissRules,
             'description' => ['nullable', 'string', 'max:500'],
             'status' => ['required', Rule::in(['active', 'inactive'])],
         ]);
 
+        if (! $supplierId) {
+            $this->addError('supplierId', __('Selecciona proveedor.'));
+
+            return;
+        }
+
+        $catalog = VehicleCategoryCatalog::query()->findOrFail($validated['vehicleCategoryCatalogId']);
+
         VehicleCategory::query()->create([
-            'supplier_id' => $validated['supplierId'],
-            'name' => $validated['name'],
-            'code' => str($validated['code'])->upper()->toString(),
-            'acriss_prefix' => $validated['acrissPrefix'] !== ''
-                ? str($validated['acrissPrefix'])->upper()->toString()
+            'supplier_id' => $supplierId,
+            'vehicle_category_catalog_id' => $catalog->id,
+            'supplier_code' => $validated['supplierCode'] !== ''
+                ? str($validated['supplierCode'])->upper()->toString()
+                : null,
+            'name' => $catalog->name_es,
+            'code' => $catalog->code,
+            'acriss_prefix' => $validated['acrissCode'] !== ''
+                ? str($validated['acrissCode'])->upper()->toString()
                 : null,
             'description' => $validated['description'] ?: null,
             'status' => $validated['status'],
         ]);
 
-        $this->reset(['name', 'code', 'acrissPrefix', 'description']);
+        $this->reset(['vehicleCategoryCatalogId', 'supplierCode', 'acrissCode', 'description']);
         $this->status = 'active';
         $this->resetPage();
 
@@ -86,11 +118,40 @@ new #[Title('Categorías')] class extends Component {
             ->get();
     }
 
+    /**
+     * @return Collection<int, VehicleCategoryCatalog>
+     */
+    #[Computed]
+    public function catalogCategories(): Collection
+    {
+        return VehicleCategoryCatalog::query()
+            ->with('acrissCodes:id,vehicle_category_catalog_id,code')
+            ->where('status', 'active')
+            ->orderBy('code')
+            ->get();
+    }
+
+    /**
+     * @return Collection<int, VehicleCategoryAcrissCode>
+     */
+    #[Computed]
+    public function acrissCodes(): Collection
+    {
+        if (! $this->vehicleCategoryCatalogId) {
+            return collect();
+        }
+
+        return VehicleCategoryAcrissCode::query()
+            ->where('vehicle_category_catalog_id', $this->vehicleCategoryCatalogId)
+            ->orderBy('code')
+            ->get(['id', 'vehicle_category_catalog_id', 'code']);
+    }
+
     #[Computed]
     public function categories(): LengthAwarePaginator
     {
         return VehicleCategory::query()
-            ->with('supplier:id,name,code')
+            ->with(['supplier:id,name,code', 'catalog:id,code,name_es'])
             ->forSupplier(Auth::user()->supplier_id)
             ->when($this->search !== '', function (Builder $query): void {
                 $search = str($this->search)->upper()->toString();
@@ -98,11 +159,25 @@ new #[Title('Categorías')] class extends Component {
                 $query->where(function (Builder $query) use ($search): void {
                     $query->where('name', 'like', "%{$search}%")
                         ->orWhere('code', 'like', "%{$search}%")
-                        ->orWhere('acriss_prefix', 'like', "%{$search}%");
+                        ->orWhere('acriss_prefix', 'like', "%{$search}%")
+                        ->orWhere('supplier_code', 'like', "%{$search}%")
+                        ->orWhereHas('catalog', function (Builder $query) use ($search): void {
+                            $query->where('code', 'like', "%{$search}%")
+                                ->orWhere('name_es', 'like', "%{$search}%");
+                        });
                 });
             })
             ->orderBy('name')
             ->paginate(10);
+    }
+
+    private function selectedCatalog(): ?VehicleCategoryCatalog
+    {
+        if (! $this->vehicleCategoryCatalogId) {
+            return null;
+        }
+
+        return VehicleCategoryCatalog::query()->find($this->vehicleCategoryCatalogId);
     }
 }; ?>
 
@@ -125,9 +200,33 @@ new #[Title('Categorías')] class extends Component {
                 </flux:select>
             @endif
 
-            <flux:input wire:model="name" :label="__('Nombre')" placeholder="SUV" data-test="category-name" />
-            <flux:input wire:model="code" :label="__('Código')" placeholder="SUV" maxlength="30" data-test="category-code" />
-            <flux:input wire:model="acrissPrefix" :label="__('Prefijo ACRISS')" placeholder="IF" maxlength="4" data-test="category-acriss-prefix" />
+            <flux:select wire:model.live="vehicleCategoryCatalogId" :label="__('Categoría GPS')" data-test="category-catalog">
+                <flux:select.option value="">{{ __('Selecciona categoría') }}</flux:select.option>
+                @foreach ($this->catalogCategories as $catalogCategory)
+                    <flux:select.option :value="$catalogCategory->id" wire:key="catalog-category-{{ $catalogCategory->id }}">
+                        {{ $catalogCategory->code }} · {{ $catalogCategory->name_es }}
+                    </flux:select.option>
+                @endforeach
+            </flux:select>
+
+            <flux:select
+                wire:model.live="acrissCode"
+                wire:key="category-acriss-{{ $vehicleCategoryCatalogId ?? 'none' }}"
+                :label="__('Código ACRISS')"
+                :disabled="$this->acrissCodes->isEmpty()"
+                data-test="category-acriss-code"
+            >
+                <flux:select.option value="">
+                    {{ $this->acrissCodes->isEmpty() ? __('Sin códigos ACRISS') : __('Selecciona ACRISS') }}
+                </flux:select.option>
+                @foreach ($this->acrissCodes as $acrissCodeOption)
+                    <flux:select.option :value="$acrissCodeOption->code" wire:key="category-acriss-{{ $vehicleCategoryCatalogId }}-{{ $acrissCodeOption->code }}">
+                        {{ $acrissCodeOption->code }}
+                    </flux:select.option>
+                @endforeach
+            </flux:select>
+
+            <flux:input wire:model="supplierCode" :label="__('Código proveedor')" placeholder="FULLSIZE_AUTO" maxlength="30" data-test="category-supplier-code" />
             <flux:select wire:model="status" :label="__('Estado')" data-test="category-status">
                 <flux:select.option value="active">{{ __('Activo') }}</flux:select.option>
                 <flux:select.option value="inactive">{{ __('Inactivo') }}</flux:select.option>
@@ -157,8 +256,8 @@ new #[Title('Categorías')] class extends Component {
 
         <flux:table :paginate="$this->categories">
             <flux:table.columns>
-                <flux:table.column>{{ __('Nombre') }}</flux:table.column>
-                <flux:table.column>{{ __('Código') }}</flux:table.column>
+                <flux:table.column>{{ __('Categoría GPS') }}</flux:table.column>
+                <flux:table.column>{{ __('Código proveedor') }}</flux:table.column>
                 <flux:table.column>{{ __('ACRISS') }}</flux:table.column>
                 <flux:table.column>{{ __('Proveedor') }}</flux:table.column>
                 <flux:table.column>{{ __('Estado') }}</flux:table.column>
@@ -168,8 +267,10 @@ new #[Title('Categorías')] class extends Component {
             <flux:table.rows>
                 @forelse ($this->categories as $category)
                     <flux:table.row :key="$category->id">
-                        <flux:table.cell variant="strong">{{ $category->name }}</flux:table.cell>
-                        <flux:table.cell>{{ $category->code }}</flux:table.cell>
+                        <flux:table.cell variant="strong">
+                            {{ $category->catalog?->code ?? $category->code }} · {{ $category->catalog?->name_es ?? $category->name }}
+                        </flux:table.cell>
+                        <flux:table.cell>{{ $category->supplier_code ?? '-' }}</flux:table.cell>
                         <flux:table.cell>{{ $category->acriss_prefix ?? '-' }}</flux:table.cell>
                         <flux:table.cell>{{ $category->supplier?->code ?? '-' }}</flux:table.cell>
                         <flux:table.cell>

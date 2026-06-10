@@ -56,6 +56,27 @@ test('users form creates a portal user', function () {
     ]);
 });
 
+test('users form requires globally unique usernames', function () {
+    $supplier = Supplier::factory()->create();
+    $otherSupplier = Supplier::factory()->create();
+    $admin = User::factory()->create();
+    User::factory()->create([
+        'supplier_id' => $otherSupplier->id,
+        'username' => 'cperez',
+    ]);
+
+    Livewire::actingAs($admin)
+        ->test('pages::users')
+        ->set('supplierId', $supplier->id)
+        ->set('name', 'Carlos Pérez')
+        ->set('username', 'cperez')
+        ->set('email', 'carlos@example.test')
+        ->set('password', 'temporary-password')
+        ->set('role', 'supplier_pricing')
+        ->call('save')
+        ->assertHasErrors(['username']);
+});
+
 test('users page reads active suppliers from cached array rows', function () {
     $supplier = Supplier::factory()->create(['name' => 'Cached Supplier', 'code' => 'CACHED']);
     $admin = User::factory()->create();

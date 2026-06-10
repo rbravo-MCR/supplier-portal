@@ -4,8 +4,6 @@ use App\Models\Supplier;
 use App\Models\User;
 
 test('login screen can be rendered', function () {
-    Supplier::factory()->create(['name' => 'Alamo', 'code' => 'ALAMO']);
-
     $response = $this->get(route('login'));
 
     $response
@@ -13,10 +11,8 @@ test('login screen can be rendered', function () {
         ->assertSee('Iniciar sesión')
         ->assertSee('Portal operativo para proveedores')
         ->assertSee('Entrar al portal')
-        ->assertSee('name="supplier_code"', false)
-        ->assertSee('Selecciona proveedor')
-        ->assertSee('Alamo')
-        ->assertSee('ALAMO')
+        ->assertDontSee('name="supplier_code"', false)
+        ->assertDontSee('Selecciona proveedor')
         ->assertSee('name="username"', false)
         ->assertSee('name="password"', false)
         ->assertSee('name="remember"', false)
@@ -32,7 +28,6 @@ test('users can authenticate using the login screen', function () {
     ]);
 
     $response = $this->post(route('login.store'), [
-        'supplier_code' => '',
         'username' => 'admin',
         'password' => 'password',
     ]);
@@ -53,7 +48,6 @@ test('supplier users are redirected to the supplier panel', function () {
     ]);
 
     $response = $this->post(route('login.store'), [
-        'supplier_code' => 'ALAMO',
         'username' => 'operador',
         'password' => 'password',
     ]);
@@ -78,8 +72,7 @@ test('authenticated supplier users visiting login are redirected to the supplier
         ->assertRedirect(route('supplier.dashboard'));
 });
 
-test('platform admins selecting a supplier by mistake are redirected to the admin dashboard', function () {
-    Supplier::factory()->create(['code' => 'ALAMO']);
+test('platform admins are redirected to the admin dashboard', function () {
     $user = User::factory()->create([
         'role' => 'admin',
         'supplier_id' => null,
@@ -87,7 +80,6 @@ test('platform admins selecting a supplier by mistake are redirected to the admi
     ]);
 
     $response = $this->post(route('login.store'), [
-        'supplier_code' => 'ALAMO',
         'username' => 'admin',
         'password' => 'password',
     ]);
@@ -103,7 +95,6 @@ test('users can not authenticate with invalid password', function () {
     $user = User::factory()->create(['username' => 'admin']);
 
     $response = $this->post(route('login.store'), [
-        'supplier_code' => '__internal',
         'username' => 'admin',
         'password' => 'wrong-password',
     ]);
@@ -120,7 +111,6 @@ test('disabled users cannot authenticate', function () {
     ]);
 
     $response = $this->post(route('login.store'), [
-        'supplier_code' => '__internal',
         'username' => 'admin',
         'password' => 'password',
     ]);
@@ -138,7 +128,6 @@ test('supplier users without supplier cannot authenticate', function () {
     ]);
 
     $response = $this->post(route('login.store'), [
-        'supplier_code' => '__internal',
         'username' => 'operador',
         'password' => 'password',
     ]);
@@ -157,7 +146,6 @@ test('supplier users with inactive supplier cannot authenticate', function () {
     ]);
 
     $response = $this->post(route('login.store'), [
-        'supplier_code' => 'ALAMO',
         'username' => 'operador',
         'password' => 'password',
     ]);
@@ -167,23 +155,16 @@ test('supplier users with inactive supplier cannot authenticate', function () {
     $this->assertGuest();
 });
 
-test('the same username can authenticate under different suppliers', function () {
+test('login authenticates by username and password without selecting supplier', function () {
     $alamo = Supplier::factory()->create(['code' => 'ALAMO']);
-    $hertz = Supplier::factory()->create(['code' => 'HERTZ']);
 
     $alamoUser = User::factory()->create([
         'username' => 'operador',
         'role' => 'supplier_admin',
         'supplier_id' => $alamo->id,
     ]);
-    User::factory()->create([
-        'username' => 'operador',
-        'role' => 'supplier_admin',
-        'supplier_id' => $hertz->id,
-    ]);
 
     $response = $this->post(route('login.store'), [
-        'supplier_code' => 'ALAMO',
         'username' => 'operador',
         'password' => 'password',
     ]);

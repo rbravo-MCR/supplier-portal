@@ -36,6 +36,34 @@ test('offices page displays offices with location catalog', function () {
         ->assertSee('Hotel Zone');
 });
 
+test('supplier users only see their offices and a supplier label', function () {
+    $supplier = Supplier::factory()->create(['name' => 'Alamo Rent A Car', 'code' => 'ALAMO']);
+    $otherSupplier = Supplier::factory()->create(['name' => 'Hertz', 'code' => 'HERTZ']);
+    $user = User::factory()->create([
+        'role' => 'supplier_admin',
+        'supplier_id' => $supplier->id,
+    ]);
+    $zone = Zone::factory()
+        ->for(City::factory()->for(Country::factory()))
+        ->create();
+
+    Office::factory()->for($zone)->for($supplier)->create([
+        'name' => 'Alamo Cancun Airport',
+        'code' => 'ALCUN',
+    ]);
+    Office::factory()->for($zone)->for($otherSupplier)->create([
+        'name' => 'Hertz Cancun Airport',
+        'code' => 'HTCUN',
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::offices')
+        ->assertSee('Alamo Rent A Car · ALAMO')
+        ->assertSee('Alamo Cancun Airport')
+        ->assertDontSee('Hertz Cancun Airport')
+        ->assertDontSee('Oficina global');
+});
+
 test('offices form creates supplier office', function () {
     $supplier = Supplier::factory()->create();
     $user = User::factory()->create([

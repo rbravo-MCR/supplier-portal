@@ -38,20 +38,25 @@ new #[Title('Auditoría')] class extends Component {
     #[Computed]
     public function totals(): array
     {
-        $query = Booking::query()
-            ->when(Auth::user()->supplier_id, fn (Builder $query, int $supplierId) => $query->where('supplier_id', $supplierId));
+        $supplierId = Auth::user()->supplier_id;
+        $cacheKey = "audit.totals.{$supplierId}";
 
-        $totals = $query
-            ->selectRaw('COUNT(id) as outlet_total')
-            ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as supplier_pending")
-            ->selectRaw("SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as supplier_confirmed")
-            ->first();
+        return cache()->remember($cacheKey, 60, function () use ($supplierId): array {
+            $query = Booking::query()
+                ->when($supplierId, fn (Builder $query, int $id) => $query->where('supplier_id', $id));
 
-        return [
-            'outlet_total' => (int) ($totals?->outlet_total ?? 0),
-            'supplier_pending' => (int) ($totals?->supplier_pending ?? 0),
-            'supplier_confirmed' => (int) ($totals?->supplier_confirmed ?? 0),
-        ];
+            $totals = $query
+                ->selectRaw('COUNT(id) as outlet_total')
+                ->selectRaw("SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) as supplier_pending")
+                ->selectRaw("SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) as supplier_confirmed")
+                ->first();
+
+            return [
+                'outlet_total' => (int) ($totals?->outlet_total ?? 0),
+                'supplier_pending' => (int) ($totals?->supplier_pending ?? 0),
+                'supplier_confirmed' => (int) ($totals?->supplier_confirmed ?? 0),
+            ];
+        });
     }
 
 };

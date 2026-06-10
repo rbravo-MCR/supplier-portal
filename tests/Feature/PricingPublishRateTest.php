@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Currency;
 use App\Models\Rate;
 use App\Models\Supplier;
 use App\Models\User;
@@ -8,6 +9,10 @@ use App\Modules\Pricing\Application\UseCases\PublishRate;
 use App\Modules\Pricing\Domain\Exceptions\RateOverlapDetected;
 
 test('supplier can publish a valid rate using authenticated supplier context', function () {
+    $currency = Currency::query()->firstOrCreate(
+        ['code' => 'USD'],
+        ['numeric_code' => '840', 'name' => 'US Dollar', 'symbol' => '$', 'decimal_places' => 2, 'is_active' => true],
+    );
     $supplier = Supplier::factory()->create();
     $otherSupplier = Supplier::factory()->create();
     $user = User::factory()->create([
@@ -33,6 +38,7 @@ test('supplier can publish a valid rate using authenticated supplier context', f
     ));
 
     expect($rate->supplier_id)->toBe($supplier->id)
+        ->and($rate->currency_id)->toBe($currency->id)
         ->and($rate->version)->toBe(1)
         ->and($rate->status)->toBe('active');
 
@@ -52,6 +58,10 @@ test('supplier can publish a valid rate using authenticated supplier context', f
 });
 
 test('rate validity must not overlap for the same supplier and rate key', function () {
+    Currency::query()->firstOrCreate(
+        ['code' => 'USD'],
+        ['numeric_code' => '840', 'name' => 'US Dollar', 'symbol' => '$', 'decimal_places' => 2, 'is_active' => true],
+    );
     $supplier = Supplier::factory()->create();
     $user = User::factory()->create([
         'role' => 'supplier_admin',
@@ -86,6 +96,10 @@ test('rate validity must not overlap for the same supplier and rate key', functi
 })->throws(RateOverlapDetected::class);
 
 test('rate history is not overwritten when publishing a later non overlapping version', function () {
+    $currency = Currency::query()->firstOrCreate(
+        ['code' => 'USD'],
+        ['numeric_code' => '840', 'name' => 'US Dollar', 'symbol' => '$', 'decimal_places' => 2, 'is_active' => true],
+    );
     $supplier = Supplier::factory()->create();
     $user = User::factory()->create([
         'role' => 'supplier_admin',
@@ -122,6 +136,7 @@ test('rate history is not overwritten when publishing a later non overlapping ve
 
     expect($existing->fresh()->version)->toBe(1)
         ->and($existing->fresh()->base_price)->toEqual('100.00')
+        ->and($newRate->currency_id)->toBe($currency->id)
         ->and($newRate->version)->toBe(2);
 
     expect(Rate::query()->where('supplier_id', $supplier->id)->count())->toBe(2);

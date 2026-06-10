@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Currency;
 use App\Models\Rate;
 use App\Models\Supplier;
 use App\Models\User;
@@ -27,7 +28,10 @@ class RateFactory extends Factory
             'vehicle_class' => 'SUV',
             'acriss_code' => 'IFAR',
             'rate_plan_code' => 'STD',
-            'currency' => 'USD',
+            'currency_id' => fn () => Currency::query()->firstOrCreate(
+                ['code' => 'USD'],
+                ['numeric_code' => '840', 'name' => 'US Dollar', 'symbol' => '$', 'decimal_places' => 2, 'is_active' => true],
+            )->id,
             'base_price' => 100,
             'valid_from' => now()->toDateString(),
             'valid_to' => now()->addDays(7)->toDateString(),

@@ -74,21 +74,34 @@ composer run ci:check
 
 Access is handled by Laravel Fortify with username and password authentication.
 
-The login form accepts:
+The login form accepts only:
 
-- `Proveedor`: optional. Select it for supplier users.
 - `Usuario`: the account username.
 - `Contraseña`: the account password.
 
-Platform administrators do not belong to a supplier. They can leave `Proveedor` empty and are redirected to the platform dashboard after login.
+The registration form requires selecting an active supplier. New registered accounts are related to that supplier and are redirected to the supplier dashboard after login.
 
-Supplier users are resolved by the combination of selected supplier and username, allowing the same username to exist under different suppliers.
+Platform administrators do not belong to a supplier and are redirected to the platform dashboard after login.
 
 Two-factor authentication and passkeys have been removed from the application and database schema.
+
+## Access Control
+
+The application distinguishes platform users from supplier-scoped users through `users.supplier_id`.
+
+- Platform administrators have `supplier_id = null`.
+- Supplier users, including supplier admins, have `supplier_id` assigned to the supplier they operate.
+- Login does not require selecting a supplier. The authenticated user determines the platform or supplier context.
+- Supplier-scoped users cannot access the suppliers directory, even if their role is `admin`.
+- The sidebar only shows `Proveedores` to platform users.
+
+Supplier-scoped pages automatically use the authenticated user's supplier. Platform users can select a supplier where the workflow requires it.
 
 ## Location Catalog Search
 
 Country, city, and zone lookups use the database-backed search scopes in the Eloquent models.
+
+Countries can optionally reference a currency through `countries.currency_id`. The relationship is nullable so the location catalog can grow before every country has a configured currency.
 
 On PostgreSQL, migrations enable:
 
@@ -97,6 +110,34 @@ On PostgreSQL, migrations enable:
 - trigram GIN indexes for `countries.name`, `cities.name`, and `zones.name`
 
 This makes partial searches fast and accent-insensitive, so searches such as `Mexico` can match `México`, and `Cancun` can match `Cancún`.
+
+## Currency Catalog
+
+The `currencies` master catalog stores ISO 4217 currency metadata:
+
+- `code`: unique 3-letter ISO code such as `USD`, `MXN`, or `EUR`.
+- `numeric_code`: 3-digit ISO numeric code.
+- `name`: official currency name.
+- `symbol`: visual display symbol.
+- `decimal_places`: ISO minor units, including 0-decimal currencies such as `JPY`, `KRW`, and `CLP`.
+- `is_active`: disables selection without deleting historical data.
+
+`CurrencySeeder` loads the initial operating catalog for major supplier markets. It is idempotent and can be rerun as the catalog grows.
+
+Tariffs use `rates.currency_id`; the old free-text `rates.currency` column is removed by migration. Backend workflows may receive ISO codes, but persistence resolves them to `currency_id`. Frontend displays use `symbol + amount`, while payment and integration logic should use the related currency `code`.
+
+Prices are stored as captured by the supplier. Currency conversion is not applied when saving rates; conversion belongs in query/search workflows using exchange rates.
+
+## Pricing Workflow
+
+Rates are published from controlled catalogs instead of free-text values where operational catalogs already exist:
+
+- `office_code` is selected from active offices belonging to the effective supplier.
+- `vehicle_class` is selected from active vehicle categories configured for the effective supplier.
+- `acriss_code` is selected from the ACRISS codes attached to the selected vehicle category catalog.
+- `currency_id` is selected from active ISO 4217 currencies.
+
+Supplier users only see and save data for their assigned supplier. Platform users must select the supplier before choosing supplier-dependent values such as offices, vehicle categories, and ACRISS codes.
 
 ## Vehicle Category Catalog
 

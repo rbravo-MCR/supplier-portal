@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\VehicleAvailabilityFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -52,12 +53,50 @@ class VehicleAvailability extends Model
     /**
      * Scope a query to only include availabilities for a given supplier.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<VehicleAvailability>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<VehicleAvailability>
+     * @param  Builder<VehicleAvailability>  $query
+     * @return Builder<VehicleAvailability>
      */
-    public function scopeForSupplier($query, int $supplierId)
+    public function scopeForSupplier($query, ?int $supplierId)
     {
+        if ($supplierId === null) {
+            return $query;
+        }
+
         return $query->where('supplier_id', $supplierId);
+    }
+
+    /**
+     * Scope a query to availabilities active on a given date.
+     *
+     * @param  Builder<VehicleAvailability>  $query
+     * @return Builder<VehicleAvailability>
+     */
+    public function scopeForDate($query, string $date)
+    {
+        if ($query->getConnection()->getDriverName() === 'pgsql') {
+            return $query->whereRaw("daterange(valid_from, valid_to, '[]') @> ?::date", [$date]);
+        }
+
+        return $query->where('valid_from', '<=', $date)
+            ->where('valid_to', '>=', $date);
+    }
+
+    /**
+     * Scope a query to filter by location code, acriss code or vehicle class.
+     *
+     * @param  Builder<VehicleAvailability>  $query
+     * @return Builder<VehicleAvailability>
+     */
+    public function scopeSearch($query, string $term)
+    {
+        $op = $query->getConnection()->getDriverName() === 'pgsql' ? 'ilike' : 'like';
+        $upper = str($term)->upper()->toString();
+
+        return $query->where(function ($query) use ($term, $upper, $op) {
+            $query->where('location_code', $op, "{$upper}%")
+                ->orWhere('acriss_code', $op, "{$upper}%")
+                ->orWhere('vehicle_class', $op, "%{$term}%");
+        });
     }
 
     /**

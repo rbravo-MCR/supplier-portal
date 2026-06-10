@@ -128,11 +128,14 @@ class User extends Authenticatable
      */
     public function scopeSearch($query, string $term)
     {
-        return $query->where(function ($query) use ($term) {
-            $query->where('name', 'like', "%{$term}%")
-                ->orWhere('username', 'like', "%{$term}%")
-                ->orWhere('email', 'like', "%{$term}%")
-                ->orWhere('role', 'like', "%{$term}%");
+        $isPostgres = $query->getConnection()->getDriverName() === 'pgsql';
+        $op = $isPostgres ? 'ilike' : 'like';
+
+        return $query->where(function ($query) use ($term, $op) {
+            $query->where('name', $op, "%{$term}%")
+                ->orWhere('username', $op, "%{$term}%")
+                ->orWhere('email', $op, "%{$term}%")
+                ->orWhere('role', $op, "%{$term}%");
         });
     }
 }

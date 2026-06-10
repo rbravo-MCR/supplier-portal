@@ -23,6 +23,11 @@ class EnsurePrimaryDatabaseIsAvailable
     ) {}
 
     /**
+     * The last technical error message captured during the health check.
+     */
+    private string $lastTechnicalMessage = 'Primary database availability check failed.';
+
+    /**
      * Handle an incoming request.
      *
      * @param  Closure(Request): (Response)  $next
@@ -37,20 +42,37 @@ class EnsurePrimaryDatabaseIsAvailable
             );
         }
 
-        try {
-            $this->assertDatabaseIsAvailable();
-            $this->circuitBreaker->recordSuccess();
-        } catch (Throwable $exception) {
-            $this->circuitBreaker->recordFailure();
-
-            return $this->unavailableResponse(
-                request: $request,
-                technicalMessage: $exception->getMessage(),
-                attempts: (int) config('incident-fallback.database_check.max_attempts'),
-            );
+        if ($this->databaseIsHealthy()) {
+            return $next($request);
         }
 
-        return $next($request);
+        $this->circuitBreaker->recordFailure();
+
+        return $this->unavailableResponse(
+            request: $request,
+            technicalMessage: $this->lastTechnicalMessage,
+            attempts: (int) config('incident-fallback.database_check.max_attempts'),
+        );
+    }
+
+    /**
+     * Determine whether the database is healthy, using a short-lived cache to
+     * avoid redundant ping queries on every request.
+     */
+    private function databaseIsHealthy(): bool
+    {
+        return cache()->remember('db.health', 5, function (): bool {
+            try {
+                $this->assertDatabaseIsAvailable();
+                $this->circuitBreaker->recordSuccess();
+
+                return true;
+            } catch (Throwable $exception) {
+                $this->lastTechnicalMessage = $exception->getMessage();
+
+                return false;
+            }
+        });
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\SupplierFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -81,8 +82,8 @@ class Supplier extends Model
     /**
      * Scope a query to only include active suppliers.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Supplier>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<Supplier>
+     * @param  Builder<Supplier>  $query
+     * @return Builder<Supplier>
      */
     public function scopeActive($query)
     {
@@ -92,16 +93,19 @@ class Supplier extends Model
     /**
      * Scope a query to filter by name, code or contact data.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Supplier>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<Supplier>
+     * @param  Builder<Supplier>  $query
+     * @return Builder<Supplier>
      */
     public function scopeSearch($query, string $term)
     {
-        return $query->where(function ($query) use ($term) {
-            $query->where('name', 'like', "%{$term}%")
-                ->orWhere('code', 'like', "%{$term}%")
-                ->orWhere('contact_name', 'like', "%{$term}%")
-                ->orWhere('email', 'like', "%{$term}%");
+        $isPostgres = $query->getConnection()->getDriverName() === 'pgsql';
+        $op = $isPostgres ? 'ilike' : 'like';
+
+        return $query->where(function ($query) use ($term, $op) {
+            $query->where('name', $op, "%{$term}%")
+                ->orWhere('code', $op, "%{$term}%")
+                ->orWhere('contact_name', $op, "%{$term}%")
+                ->orWhere('email', $op, "%{$term}%");
         });
     }
 }

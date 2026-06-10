@@ -136,6 +136,7 @@ new #[Title('Importaciones')] class extends Component {
     {
         return Supplier::query()
             ->select(['id', 'name', 'code'])
+            ->active()
             ->orderBy('name')
             ->get();
     }

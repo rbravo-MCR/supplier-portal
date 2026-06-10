@@ -7,6 +7,7 @@
 
 <link rel="icon" href="/favicon_outlet.png" type="image/png">
 <link rel="apple-touch-icon" href="/favicon_outlet.png">
+<link rel="preconnect" href="https://fonts.bunny.net" crossorigin>
 
 @fonts
 

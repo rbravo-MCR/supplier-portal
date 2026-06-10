@@ -25,19 +25,6 @@
         >
             @csrf
 
-            <flux:select
-                name="supplier_code"
-                :label="__('Proveedor')"
-                data-test="login-supplier"
-            >
-                <flux:select.option value="">{{ __('Selecciona proveedor') }}</flux:select.option>
-                @foreach ($suppliers as $supplier)
-                    <flux:select.option :value="$supplier->code" :selected="old('supplier_code') === $supplier->code">
-                        {{ $supplier->name }} · {{ $supplier->code }}
-                    </flux:select.option>
-                @endforeach
-            </flux:select>
-
             <flux:input
                 name="username"
                 :label="__('Usuario')"

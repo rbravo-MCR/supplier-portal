@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Database\Factories\BookingFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -61,8 +62,8 @@ class Booking extends Model
     /**
      * Scope a query to only include bookings for a given supplier.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Booking>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<Booking>
+     * @param  Builder<Booking>  $query
+     * @return Builder<Booking>
      */
     public function scopeForSupplier($query, ?int $supplierId)
     {
@@ -76,8 +77,8 @@ class Booking extends Model
     /**
      * Scope a query to only include pending bookings.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Booking>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<Booking>
+     * @param  Builder<Booking>  $query
+     * @return Builder<Booking>
      */
     public function scopePending($query)
     {
@@ -87,18 +88,21 @@ class Booking extends Model
     /**
      * Scope a query to filter by reservation code, customer name, vehicle class or office codes.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<Booking>  $query
-     * @return \Illuminate\Database\Eloquent\Builder<Booking>
+     * @param  Builder<Booking>  $query
+     * @return Builder<Booking>
      */
     public function scopeSearch($query, string $term)
     {
-        return $query->where(function ($query) use ($term) {
-            $query->where('reservation_code', 'like', "%{$term}%")
-                ->orWhere('customer_name', 'like', "%{$term}%")
-                ->orWhere('vehicle_class', 'like', "%{$term}%")
-                ->orWhere('pickup_office_code', 'like', "%{$term}%")
-                ->orWhere('dropoff_office_code', 'like', "%{$term}%")
-                ->orWhere('status', 'like', "%{$term}%");
+        $isPostgres = $query->getConnection()->getDriverName() === 'pgsql';
+        $op = $isPostgres ? 'ilike' : 'like';
+
+        return $query->where(function ($query) use ($term, $op) {
+            $query->where('reservation_code', $op, "%{$term}%")
+                ->orWhere('customer_name', $op, "%{$term}%")
+                ->orWhere('vehicle_class', $op, "%{$term}%")
+                ->orWhere('pickup_office_code', $op, "%{$term}%")
+                ->orWhere('dropoff_office_code', $op, "%{$term}%")
+                ->orWhere('status', $op, "%{$term}%");
         });
     }
 

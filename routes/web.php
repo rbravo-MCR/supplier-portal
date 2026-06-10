@@ -71,6 +71,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::livewire('offices', 'pages::offices')->name('portal.offices');
 
+    Route::livewire('availabilities', 'pages::availabilities')->name('portal.availabilities');
+
     Route::livewire('categories', 'pages::categories')->name('portal.categories');
 
     Route::livewire('audit', 'pages::audit')->name('portal.audit');

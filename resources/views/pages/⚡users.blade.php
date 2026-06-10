@@ -48,7 +48,7 @@ new #[Title('Usuarios')] class extends Component {
         $validated = $this->validate([
             'supplierId' => ['nullable', 'integer', Rule::exists('suppliers', 'id')],
             'name' => ['required', 'string', 'max:255'],
-            'username' => ['required', 'string', 'lowercase', 'alpha_dash:ascii', 'max:255'],
+            'username' => ['required', 'string', 'lowercase', 'alpha_dash:ascii', 'max:255', Rule::unique('users', 'username')],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'string', 'min:8', 'max:255'],
             'role' => ['required', Rule::in(['admin', 'supplier_admin', 'supplier_reservations', 'supplier_pricing'])],
@@ -56,16 +56,6 @@ new #[Title('Usuarios')] class extends Component {
         ]);
 
         $supplierId = Auth::user()->supplier_id ?: $validated['supplierId'];
-
-        validator($validated, [
-            'username' => [
-                Rule::unique('users', 'username')->where(
-                    fn ($query) => $supplierId
-                        ? $query->where('supplier_id', $supplierId)
-                        : $query->whereNull('supplier_id')
-                ),
-            ],
-        ])->validate();
 
         User::query()->create([
             'supplier_id' => $supplierId,

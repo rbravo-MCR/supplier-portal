@@ -129,6 +129,20 @@ new #[Title('Oficinas')] class extends Component {
         $this->resetPage();
     }
 
+    #[Computed]
+    public function currentSupplier(): ?Supplier
+    {
+        $supplierId = Auth::user()->supplier_id;
+
+        if (! $supplierId) {
+            return null;
+        }
+
+        return Supplier::query()
+            ->select(['id', 'name', 'code'])
+            ->find($supplierId);
+    }
+
     public function save(): void
     {
         $supplierId = Auth::user()->supplier_id ?: $this->supplierId;
@@ -557,6 +571,13 @@ new #[Title('Oficinas')] class extends Component {
                         <flux:select.option :value="$supplier->id">{{ $supplier->name }} · {{ $supplier->code }}</flux:select.option>
                     @endforeach
                 </flux:select>
+            @else
+                <div class="flex flex-col gap-2" data-test="office-current-supplier">
+                    <flux:text class="text-sm font-medium text-zinc-700 dark:text-zinc-300">{{ __('Proveedor') }}</flux:text>
+                    <div class="flex min-h-10 items-center rounded-md border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100">
+                        {{ $this->currentSupplier?->name }} · {{ $this->currentSupplier?->code }}
+                    </div>
+                </div>
             @endif
 
             <x-portal-searchable-select

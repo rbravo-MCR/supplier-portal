@@ -7,6 +7,20 @@
 
         <form method="POST" action="{{ route('register.store') }}" class="flex flex-col gap-6" x-data="{ submitting: false }" x-on:submit="submitting = true">
             @csrf
+            <flux:select
+                name="supplier_id"
+                :label="__('Proveedor')"
+                required
+                data-test="register-supplier"
+            >
+                <flux:select.option value="">{{ __('Selecciona proveedor') }}</flux:select.option>
+                @foreach ($suppliers as $supplier)
+                    <flux:select.option :value="$supplier->id" :selected="(string) old('supplier_id') === (string) $supplier->id">
+                        {{ $supplier->name }} · {{ $supplier->code }}
+                    </flux:select.option>
+                @endforeach
+            </flux:select>
+
             <!-- Name -->
             <flux:input
                 name="name"

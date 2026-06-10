@@ -1,8 +1,11 @@
 <?php
 
 use App\Concerns\RemembersModelRows;
+use App\Models\Currency;
+use App\Models\Office;
 use App\Models\Rate;
 use App\Models\Supplier;
+use App\Models\VehicleCategory;
 use Flux\Flux;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -22,13 +25,13 @@ new #[Title('Precios')] class extends Component {
 
     public string $officeCode = '';
 
-    public string $vehicleClass = '';
+    public ?int $vehicleCategoryId = null;
 
     public string $acrissCode = '';
 
     public string $ratePlanCode = '';
 
-    public string $currency = 'USD';
+    public ?int $currencyId = null;
 
     public string $basePrice = '';
 
@@ -47,6 +50,7 @@ new #[Title('Precios')] class extends Component {
     public function mount(): void
     {
         $this->supplierId = Auth::user()->supplier_id;
+        $this->currencyId = Currency::query()->where('code', 'USD')->value('id');
         $this->validFrom = now()->toDateString();
         $this->validTo = now()->addDays(30)->toDateString();
     }
@@ -61,15 +65,46 @@ new #[Title('Precios')] class extends Component {
         $this->resetPage();
     }
 
+    public function updatedSupplierId(): void
+    {
+        $this->reset(['officeCode', 'vehicleCategoryId', 'acrissCode']);
+    }
+
+    public function updatedVehicleCategoryId(): void
+    {
+        $this->acrissCode = '';
+    }
+
     public function save(): void
     {
+        $supplierId = Auth::user()->supplier_id ?: $this->supplierId;
+
+        if (! $supplierId) {
+            $this->addError('supplierId', __('Selecciona proveedor.'));
+
+            return;
+        }
+
         $validated = $this->validate([
-            'supplierId' => ['required', 'integer', Rule::exists('suppliers', 'id')],
-            'officeCode' => ['required', 'string', 'max:10'],
-            'vehicleClass' => ['required', 'string', 'max:50'],
+            'supplierId' => ['nullable', 'integer', Rule::exists('suppliers', 'id')],
+            'officeCode' => [
+                'required',
+                'string',
+                'max:10',
+                Rule::exists('offices', 'code')
+                    ->where('supplier_id', $supplierId)
+                    ->where('status', 'active'),
+            ],
+            'vehicleCategoryId' => [
+                'required',
+                'integer',
+                Rule::exists('vehicle_categories', 'id')
+                    ->where('supplier_id', $supplierId)
+                    ->where('status', 'active'),
+            ],
             'acrissCode' => ['required', 'string', 'size:4'],
             'ratePlanCode' => ['required', 'string', 'max:30'],
-            'currency' => ['required', 'string', 'size:3'],
+            'currencyId' => ['required', 'integer', Rule::exists('currencies', 'id')->where('is_active', true)],
             'basePrice' => ['required', 'numeric', 'min:0.01'],
             'validFrom' => ['required', 'date'],
             'validTo' => ['required', 'date', 'after_or_equal:validFrom'],
@@ -77,33 +112,55 @@ new #[Title('Precios')] class extends Component {
             'maxDays' => ['nullable', 'integer', 'gte:minDays'],
         ]);
 
+        $vehicleCategory = $this->selectedVehicleCategory($supplierId);
+
+        if (! $vehicleCategory) {
+            $this->addError('vehicleCategoryId', __('Selecciona una categoría válida para el proveedor.'));
+
+            return;
+        }
+
         $officeCode = str($validated['officeCode'])->upper()->toString();
         $acrissCode = str($validated['acrissCode'])->upper()->toString();
         $ratePlanCode = str($validated['ratePlanCode'])->upper()->toString();
+        $currency = Currency::query()->findOrFail($validated['currencyId']);
+        $allowedAcrissCodes = $this->allowedAcrissCodes($vehicleCategory);
+
+        if ($currency->decimal_places === 0 && (float) $validated['basePrice'] !== floor((float) $validated['basePrice'])) {
+            $this->addError('basePrice', __('La moneda seleccionada no permite decimales.'));
+
+            return;
+        }
+
+        if (! in_array($acrissCode, $allowedAcrissCodes, true)) {
+            $this->addError('acrissCode', __('Selecciona un código ACRISS válido para la categoría.'));
+
+            return;
+        }
 
         Rate::query()->create([
-            'supplier_id' => $validated['supplierId'],
+            'supplier_id' => $supplierId,
             'office_code' => $officeCode,
-            'vehicle_class' => str($validated['vehicleClass'])->upper()->toString(),
+            'vehicle_class' => $vehicleCategory->catalog?->code ?? $vehicleCategory->code,
             'acriss_code' => $acrissCode,
             'rate_plan_code' => $ratePlanCode,
-            'currency' => str($validated['currency'])->upper()->toString(),
+            'currency_id' => $currency->id,
             'base_price' => $validated['basePrice'],
             'valid_from' => $validated['validFrom'],
             'valid_to' => $validated['validTo'],
             'min_days' => $validated['minDays'],
             'max_days' => $validated['maxDays'],
             'status' => 'active',
-            'version' => $this->nextVersion($validated),
+            'version' => $this->nextVersion([...$validated, 'supplierId' => $supplierId]),
             'created_by' => Auth::id(),
         ]);
 
-        Cache::forget("rate.version.{$validated['supplierId']}.{$officeCode}.{$acrissCode}.{$ratePlanCode}");
-        Cache::forget("rate.overlap.{$validated['supplierId']}.{$officeCode}.{$acrissCode}.{$ratePlanCode}.{$validated['validFrom']}.{$validated['validTo']}");
+        Cache::forget("rate.version.{$supplierId}.{$officeCode}.{$acrissCode}.{$ratePlanCode}");
+        Cache::forget("rate.overlap.{$supplierId}.{$officeCode}.{$acrissCode}.{$ratePlanCode}.{$validated['validFrom']}.{$validated['validTo']}");
 
         $this->reset([
             'officeCode',
-            'vehicleClass',
+            'vehicleCategoryId',
             'acrissCode',
             'ratePlanCode',
             'basePrice',
@@ -119,6 +176,78 @@ new #[Title('Precios')] class extends Component {
     }
 
     /**
+     * @return Collection<int, Currency>
+     */
+    #[Computed]
+    public function currencies(): Collection
+    {
+        return $this->rememberModels('currencies.active', Currency::class, function () {
+            return Currency::query()
+                ->select(['id', 'code', 'name', 'symbol', 'decimal_places'])
+                ->active()
+                ->orderBy('code')
+                ->get();
+        });
+    }
+
+    /**
+     * @return Collection<int, Office>
+     */
+    #[Computed]
+    public function offices(): Collection
+    {
+        $supplierId = Auth::user()->supplier_id ?: $this->supplierId;
+
+        if (! $supplierId) {
+            return collect();
+        }
+
+        return Office::query()
+            ->select(['id', 'supplier_id', 'name', 'code', 'iata_code', 'status'])
+            ->where('supplier_id', $supplierId)
+            ->where('status', 'active')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * @return Collection<int, VehicleCategory>
+     */
+    #[Computed]
+    public function vehicleCategories(): Collection
+    {
+        $supplierId = Auth::user()->supplier_id ?: $this->supplierId;
+
+        if (! $supplierId) {
+            return collect();
+        }
+
+        return VehicleCategory::query()
+            ->with(['catalog:id,code,name_es', 'catalog.acrissCodes:id,vehicle_category_catalog_id,code'])
+            ->select(['id', 'supplier_id', 'vehicle_category_catalog_id', 'supplier_code', 'name', 'code', 'acriss_prefix', 'status'])
+            ->where('supplier_id', $supplierId)
+            ->where('status', 'active')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * @return Collection<int, string>
+     */
+    #[Computed]
+    public function acrissCodes(): Collection
+    {
+        $supplierId = Auth::user()->supplier_id ?: $this->supplierId;
+        $vehicleCategory = $this->selectedVehicleCategory($supplierId);
+
+        if (! $vehicleCategory) {
+            return collect();
+        }
+
+        return collect($this->allowedAcrissCodes($vehicleCategory))->sort()->values();
+    }
+
+    /**
      * @param array<string, mixed> $validated
      */
     protected function nextVersion(array $validated): int
@@ -129,7 +258,7 @@ new #[Title('Precios')] class extends Component {
         $ratePlanCode = str($validated['ratePlanCode'])->upper()->toString();
         $cacheKey = "rate.version.{$supplierId}.{$officeCode}.{$acrissCode}.{$ratePlanCode}";
 
-        return Cache::remember($cacheKey, 300, function () use ($supplierId, $officeCode, $acrissCode, $ratePlanCode): int {
+        return Cache::remember($cacheKey, 3600, function () use ($supplierId, $officeCode, $acrissCode, $ratePlanCode): int {
             $latestVersion = Rate::query()
                 ->where('supplier_id', $supplierId)
                 ->where('office_code', $officeCode)
@@ -160,7 +289,7 @@ new #[Title('Precios')] class extends Component {
     public function rates(): LengthAwarePaginator
     {
         return Rate::query()
-            ->with('supplier:id,name,code')
+            ->with(['supplier:id,name,code', 'currency:id,code,symbol,decimal_places'])
             ->forSupplier(Auth::user()->supplier_id)
             ->when($this->status !== 'all', fn (Builder $query) => $query->where('status', $this->status))
             ->when($this->search !== '', function (Builder $query): void {
@@ -169,6 +298,41 @@ new #[Title('Precios')] class extends Component {
             ->orderByDesc('valid_from')
             ->orderByDesc('id')
             ->paginate(10);
+    }
+
+    private function selectedVehicleCategory(?int $supplierId): ?VehicleCategory
+    {
+        if (! $supplierId || ! $this->vehicleCategoryId) {
+            return null;
+        }
+
+        return VehicleCategory::query()
+            ->with(['catalog:id,code,name_es', 'catalog.acrissCodes:id,vehicle_category_catalog_id,code'])
+            ->whereKey($this->vehicleCategoryId)
+            ->where('supplier_id', $supplierId)
+            ->where('status', 'active')
+            ->first();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function allowedAcrissCodes(VehicleCategory $vehicleCategory): array
+    {
+        $catalogCodes = $vehicleCategory->catalog?->acrissCodes
+            ->pluck('code')
+            ->map(fn (string $code): string => str($code)->upper()->toString())
+            ->all() ?? [];
+
+        if ($catalogCodes !== []) {
+            return array_values(array_unique($catalogCodes));
+        }
+
+        if ($vehicleCategory->acriss_prefix) {
+            return [str($vehicleCategory->acriss_prefix)->upper()->toString()];
+        }
+
+        return [];
     }
 }; ?>
 
@@ -191,11 +355,51 @@ new #[Title('Precios')] class extends Component {
                 </flux:select>
             @endif
 
-            <flux:input wire:model="officeCode" :label="__('Oficina')" placeholder="CUN" maxlength="10" data-test="price-office" />
-            <flux:input wire:model="vehicleClass" :label="__('Clase vehículo')" placeholder="SUV" maxlength="50" data-test="price-vehicle-class" />
-            <flux:input wire:model="acrissCode" :label="__('ACRISS')" placeholder="IFAR" maxlength="4" data-test="price-acriss" />
+            <flux:select wire:model.live="officeCode" :label="__('Oficina')" data-test="price-office">
+                <flux:select.option value="">
+                    {{ $this->offices->isEmpty() ? __('Sin oficinas del proveedor') : __('Selecciona oficina') }}
+                </flux:select.option>
+                @foreach ($this->offices as $office)
+                    <flux:select.option :value="$office->code" wire:key="price-office-{{ $office->id }}">
+                        {{ $office->name }} · {{ $office->code }}
+                    </flux:select.option>
+                @endforeach
+            </flux:select>
+            <flux:select wire:model.live="vehicleCategoryId" :label="__('Categoría vehículo')" data-test="price-vehicle-category">
+                <flux:select.option value="">
+                    {{ $this->vehicleCategories->isEmpty() ? __('Sin categorías del proveedor') : __('Selecciona categoría') }}
+                </flux:select.option>
+                @foreach ($this->vehicleCategories as $vehicleCategory)
+                    <flux:select.option :value="$vehicleCategory->id" wire:key="price-vehicle-category-{{ $vehicleCategory->id }}">
+                        {{ $vehicleCategory->catalog?->code ?? $vehicleCategory->code }} · {{ $vehicleCategory->catalog?->name_es ?? $vehicleCategory->name }}
+                    </flux:select.option>
+                @endforeach
+            </flux:select>
+            <flux:select
+                wire:model.live="acrissCode"
+                wire:key="price-acriss-{{ $vehicleCategoryId ?? 'none' }}"
+                :label="__('ACRISS')"
+                :disabled="$this->acrissCodes->isEmpty()"
+                data-test="price-acriss"
+            >
+                <flux:select.option value="">
+                    {{ $this->acrissCodes->isEmpty() ? __('Sin códigos ACRISS') : __('Selecciona ACRISS') }}
+                </flux:select.option>
+                @foreach ($this->acrissCodes as $acrissCodeOption)
+                    <flux:select.option :value="$acrissCodeOption" wire:key="price-acriss-{{ $vehicleCategoryId }}-{{ $acrissCodeOption }}">
+                        {{ $acrissCodeOption }}
+                    </flux:select.option>
+                @endforeach
+            </flux:select>
             <flux:input wire:model="ratePlanCode" :label="__('Plan')" placeholder="STD" maxlength="30" data-test="price-plan" />
-            <flux:input wire:model="currency" :label="__('Moneda')" placeholder="USD" maxlength="3" data-test="price-currency" />
+            <flux:select wire:model="currencyId" :label="__('Moneda')" data-test="price-currency">
+                <flux:select.option value="">{{ __('Selecciona moneda') }}</flux:select.option>
+                @foreach ($this->currencies as $currency)
+                    <flux:select.option :value="$currency->id" wire:key="price-currency-{{ $currency->id }}">
+                        {{ $currency->code }} · {{ $currency->name }}
+                    </flux:select.option>
+                @endforeach
+            </flux:select>
             <flux:input wire:model="basePrice" :label="__('Precio base')" type="number" step="0.01" min="0.01" data-test="price-base" />
             <flux:input wire:model="validFrom" :label="__('Vigente desde')" type="date" data-test="price-valid-from" />
             <flux:input wire:model="validTo" :label="__('Vigente hasta')" type="date" data-test="price-valid-to" />
@@ -247,7 +451,10 @@ new #[Title('Precios')] class extends Component {
                         <flux:table.cell>{{ $rate->rate_plan_code }}</flux:table.cell>
                         <flux:table.cell>{{ $rate->supplier?->code ?? '-' }}</flux:table.cell>
                         <flux:table.cell>{{ $rate->valid_from->format('Y-m-d') }} / {{ $rate->valid_to->format('Y-m-d') }}</flux:table.cell>
-                        <flux:table.cell align="end">{{ $rate->currency }} {{ number_format((float) $rate->base_price, 2) }}</flux:table.cell>
+                        <flux:table.cell align="end">
+                            {{ $rate->currency?->symbol ?? $rate->currency?->code }}
+                            {{ number_format((float) $rate->base_price, $rate->currency?->decimal_places ?? 2) }}
+                        </flux:table.cell>
                     </flux:table.row>
                 @empty
                     <flux:table.row>

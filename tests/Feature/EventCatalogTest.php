@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Booking;
+use App\Models\Currency;
 use App\Models\OutboxEvent;
 use App\Models\Supplier;
 use App\Models\User;
@@ -89,6 +90,10 @@ test('rate import uploaded event follows catalog payload', function () {
 });
 
 test('rates published event follows catalog payload', function () {
+    Currency::query()->firstOrCreate(
+        ['code' => 'USD'],
+        ['numeric_code' => '840', 'name' => 'US Dollar', 'symbol' => '$', 'decimal_places' => 2, 'is_active' => true],
+    );
     $supplier = Supplier::factory()->create();
     $user = User::factory()->create([
         'role' => 'supplier_admin',

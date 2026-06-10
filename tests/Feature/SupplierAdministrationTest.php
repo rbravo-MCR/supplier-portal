@@ -8,7 +8,7 @@ use App\Modules\Supplier\Domain\Exceptions\SupplierCodeAlreadyExists;
 use App\Policies\SupplierPolicy;
 
 test('only platform administrators can create suppliers', function () {
-    $policy = new SupplierPolicy();
+    $policy = new SupplierPolicy;
 
     expect($policy->create(User::factory()->make(['role' => 'super_admin'])))->toBeTrue()
         ->and($policy->create(User::factory()->make(['role' => 'admin'])))->toBeTrue()
@@ -18,11 +18,12 @@ test('only platform administrators can create suppliers', function () {
 });
 
 test('platform roles can view suppliers but supplier roles cannot', function () {
-    $policy = new SupplierPolicy();
+    $policy = new SupplierPolicy;
 
     expect($policy->viewAny(User::factory()->make(['role' => 'super_admin'])))->toBeTrue()
         ->and($policy->viewAny(User::factory()->make(['role' => 'admin'])))->toBeTrue()
         ->and($policy->viewAny(User::factory()->make(['role' => 'auditor'])))->toBeTrue()
+        ->and($policy->viewAny(User::factory()->make(['role' => 'admin', 'supplier_id' => 1])))->toBeFalse()
         ->and($policy->viewAny(User::factory()->make(['role' => 'supplier_admin'])))->toBeFalse()
         ->and($policy->viewAny(User::factory()->make(['role' => 'supplier_user'])))->toBeFalse();
 });
@@ -50,10 +51,10 @@ test('super admin can create a supplier with configurable limits', function () {
 
     $this->assertDatabaseHas('suppliers', [
         'id' => $supplier->id,
-            'name' => 'Acme Car Rentals',
-            'code' => 'ACME',
-            'status' => 'inactive',
-            'max_users' => 8,
+        'name' => 'Acme Car Rentals',
+        'code' => 'ACME',
+        'status' => 'inactive',
+        'max_users' => 8,
     ]);
 
     $this->assertDatabaseHas('audit_logs', [
@@ -86,7 +87,7 @@ test('supplier code must be unique', function () {
 })->throws(SupplierCodeAlreadyExists::class);
 
 test('auditors can view but cannot mutate a supplier', function () {
-    $policy = new SupplierPolicy();
+    $policy = new SupplierPolicy;
     $supplier = Supplier::factory()->make();
     $auditor = User::factory()->make(['role' => 'auditor']);
 
@@ -96,7 +97,7 @@ test('auditors can view but cannot mutate a supplier', function () {
 });
 
 test('admin users can update supplier status', function () {
-    $policy = new SupplierPolicy();
+    $policy = new SupplierPolicy;
     $supplier = Supplier::factory()->make();
 
     expect($policy->update(User::factory()->make(['role' => 'super_admin']), $supplier))->toBeTrue()

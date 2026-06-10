@@ -28,6 +28,18 @@ test('supplier users cannot view the suppliers directory', function () {
         ->assertForbidden();
 });
 
+test('supplier scoped admins cannot view the suppliers directory', function () {
+    $supplier = Supplier::factory()->create(['name' => 'Alamo', 'code' => 'ALAMO']);
+    $user = User::factory()->create([
+        'role' => 'admin',
+        'supplier_id' => $supplier->id,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('portal.suppliers'))
+        ->assertForbidden();
+});
+
 test('admin can create suppliers from the page', function () {
     $user = User::factory()->create(['role' => 'admin', 'supplier_id' => null]);
 

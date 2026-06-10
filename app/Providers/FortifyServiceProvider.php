@@ -52,23 +52,11 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::createUsersUsing(CreateNewUser::class);
 
         Fortify::authenticateUsing(function (Request $request): ?User {
-            $supplierCode = Str::lower((string) $request->input('supplier_code'));
             $username = Str::lower((string) $request->input(Fortify::username()));
-            $isInternalLogin = $supplierCode === '' || $supplierCode === '__internal';
 
             $users = User::query()
                 ->with('supplier')
-                ->whereRaw('LOWER(username) = ?', [$username])
-                ->where(function ($query) use ($isInternalLogin, $supplierCode): void {
-                    $query->whereNull('supplier_id');
-
-                    if (! $isInternalLogin) {
-                        $query->orWhereHas(
-                            'supplier',
-                            fn ($query) => $query->whereRaw('LOWER(code) = ?', [$supplierCode]),
-                        );
-                    }
-                })
+                ->where('username', $username)
                 ->orderByRaw('supplier_id IS NULL')
                 ->get();
 
@@ -90,16 +78,16 @@ class FortifyServiceProvider extends ServiceProvider
      */
     private function configureViews(): void
     {
-        Fortify::loginView(fn () => view('pages::auth.login', [
+        Fortify::loginView(fn () => view('pages::auth.login'));
+        Fortify::verifyEmailView(fn () => view('pages::auth.verify-email'));
+        Fortify::confirmPasswordView(fn () => view('pages::auth.confirm-password'));
+        Fortify::registerView(fn () => view('pages::auth.register', [
             'suppliers' => Supplier::query()
-                ->select(['name', 'code'])
+                ->select(['id', 'name', 'code'])
                 ->active()
                 ->orderBy('name')
                 ->get(),
         ]));
-        Fortify::verifyEmailView(fn () => view('pages::auth.verify-email'));
-        Fortify::confirmPasswordView(fn () => view('pages::auth.confirm-password'));
-        Fortify::registerView(fn () => view('pages::auth.register'));
         Fortify::resetPasswordView(fn () => view('pages::auth.reset-password'));
         Fortify::requestPasswordResetLinkView(fn () => view('pages::auth.forgot-password'));
     }
@@ -111,7 +99,7 @@ class FortifyServiceProvider extends ServiceProvider
     {
         RateLimiter::for('login', function (Request $request) {
             $throttleKey = Str::transliterate(
-                Str::lower($request->input('supplier_code')).'|'.Str::lower($request->input(Fortify::username())).'|'.$request->ip(),
+                Str::lower($request->input(Fortify::username())).'|'.$request->ip(),
             );
 
             return Limit::perMinute(5)->by($throttleKey);

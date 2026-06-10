@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Country;
+use App\Models\Currency;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
 
@@ -25,6 +26,7 @@ class CountryFactory extends Factory
             'name' => fake()->unique()->country(),
             'iso2' => $iso2,
             'iso3' => Str::upper(fake()->unique()->lexify('???')),
+            'currency_id' => Currency::factory(),
             'status' => 'active',
         ];
     }

@@ -121,6 +121,11 @@ new #[Title('Reservas')] class extends Component {
     private function pendingBookingQuery(): Builder
     {
         return Booking::query()
+            ->select([
+                'id', 'uuid', 'supplier_id', 'reservation_code', 'customer_name',
+                'vehicle_class', 'pickup_office_code', 'dropoff_office_code',
+                'pickup_at', 'dropoff_at', 'total_amount', 'currency', 'status',
+            ])
             ->with('supplier:id,name,code')
             ->pending()
             ->forSupplier(Auth::user()->supplier_id);

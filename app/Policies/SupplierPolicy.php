@@ -21,7 +21,8 @@ class SupplierPolicy
      */
     public function viewAny(User $user): bool
     {
-        return in_array($user->role, self::PLATFORM_VIEW_ROLES, true);
+        return $this->isPlatformUser($user)
+            && in_array($user->role, self::PLATFORM_VIEW_ROLES, true);
     }
 
     /**
@@ -37,7 +38,8 @@ class SupplierPolicy
      */
     public function create(User $user): bool
     {
-        return in_array($user->role, ['super_admin', 'admin'], true);
+        return $this->isPlatformUser($user)
+            && in_array($user->role, ['super_admin', 'admin'], true);
     }
 
     /**
@@ -45,7 +47,8 @@ class SupplierPolicy
      */
     public function update(User $user, Supplier $supplier): bool
     {
-        return in_array($user->role, ['super_admin', 'admin'], true);
+        return $this->isPlatformUser($user)
+            && in_array($user->role, ['super_admin', 'admin'], true);
     }
 
     /**
@@ -53,7 +56,8 @@ class SupplierPolicy
      */
     public function delete(User $user, Supplier $supplier): bool
     {
-        return $user->role === 'super_admin';
+        return $this->isPlatformUser($user)
+            && $user->role === 'super_admin';
     }
 
     /**
@@ -70,5 +74,10 @@ class SupplierPolicy
     public function forceDelete(User $user, Supplier $supplier): bool
     {
         return false;
+    }
+
+    private function isPlatformUser(User $user): bool
+    {
+        return $user->supplier_id === null;
     }
 }

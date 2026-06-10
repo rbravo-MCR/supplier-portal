@@ -2,15 +2,17 @@
 
 namespace App\Modules\Pricing\Infrastructure\Repositories;
 
+use App\Models\Currency;
 use App\Models\Rate;
 use App\Modules\Pricing\Application\Contracts\RateRepository;
 use App\Modules\Pricing\Application\DTOs\PublishRateData;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Str;
 
 class EloquentRateRepository implements RateRepository
 {
-    private const CACHE_TTL_SECONDS = 300;
+    private const CACHE_TTL_SECONDS = 3600;
 
     /**
      * List active rates for a supplier.
@@ -18,7 +20,7 @@ class EloquentRateRepository implements RateRepository
     public function activeForSupplier(int $supplierId, int $perPage): LengthAwarePaginator
     {
         return Rate::query()
-            ->with('supplier')
+            ->with(['supplier', 'currency'])
             ->forSupplier($supplierId)
             ->active()
             ->orderByDesc('valid_from')
@@ -69,13 +71,18 @@ class EloquentRateRepository implements RateRepository
      */
     public function create(int $supplierId, PublishRateData $data, int $version): Rate
     {
+        $currency = Currency::query()
+            ->active()
+            ->where('code', Str::upper($data->currency))
+            ->firstOrFail();
+
         $rate = Rate::query()->create([
             'supplier_id' => $supplierId,
             'office_code' => $data->officeCode,
             'vehicle_class' => $data->vehicleClass,
             'acriss_code' => $data->acrissCode,
             'rate_plan_code' => $data->ratePlanCode,
-            'currency' => $data->currency,
+            'currency_id' => $currency->id,
             'base_price' => $data->basePrice,
             'valid_from' => $data->validFrom,
             'valid_to' => $data->validTo,

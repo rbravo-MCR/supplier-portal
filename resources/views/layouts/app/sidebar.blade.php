@@ -24,6 +24,7 @@
             : (in_array($user?->role, $supplierRoles, true) ? 'supplier.dashboard' : 'admin.dashboard');
         $dashboardHref = route($dashboardRouteName);
         $dashboardIsCurrent = request()->routeIs('dashboard', 'supplier.dashboard', 'admin.dashboard');
+        $isPlatformUser = $user?->supplier_id === null;
     @endphp
 
     <body class="min-h-screen bg-white dark:bg-zinc-800">
@@ -55,9 +56,11 @@
                     <flux:sidebar.item icon="users" :href="route('portal.users')" :current="request()->routeIs('portal.users')" wire:navigate>
                         {{ __('Usuarios') }}
                     </flux:sidebar.item>
-                    <flux:sidebar.item icon="building-office-2" :href="route('portal.suppliers')" :current="request()->routeIs('portal.suppliers')" wire:navigate>
-                        {{ __('Proveedores') }}
-                    </flux:sidebar.item>
+                    @if ($isPlatformUser)
+                        <flux:sidebar.item icon="building-office-2" :href="route('portal.suppliers')" :current="request()->routeIs('portal.suppliers')" wire:navigate>
+                            {{ __('Proveedores') }}
+                        </flux:sidebar.item>
+                    @endif
                     <flux:sidebar.item icon="map-pin" :href="route('portal.offices')" :current="request()->routeIs('portal.offices')" wire:navigate>
                         {{ __('Oficinas') }}
                     </flux:sidebar.item>
