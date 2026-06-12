@@ -15,6 +15,7 @@ The platform centralizes manual supplier operations, Excel-based uploads, tracea
 - Pest 4
 - Tailwind CSS 4
 - Vite
+- Node.js 22
 - PostgreSQL with `pg_trgm` and `unaccent` for location catalog search
 
 ## Setup
@@ -35,6 +36,8 @@ Or use the Composer setup script:
 ```bash
 composer run setup
 ```
+
+Node.js 22 is the supported runtime for frontend tooling.
 
 ## Development
 
@@ -69,6 +72,47 @@ Run the Composer CI check:
 ```bash
 composer run ci:check
 ```
+
+## Production Deployment
+
+Required production environment values:
+
+```env
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=https://your-production-domain.example
+CACHE_STORE=failover
+QUEUE_CONNECTION=database
+SESSION_ENCRYPT=true
+SESSION_SECURE_COOKIE=true
+```
+
+Recommended deployment sequence:
+
+```bash
+composer install --no-dev --optimize-autoloader
+npm ci
+npm run build
+php artisan migrate --force
+php artisan optimize
+php artisan queue:restart
+```
+
+Production readiness checks:
+
+```bash
+composer audit --format=plain
+npm audit --omit=dev --audit-level=moderate
+php artisan test --compact
+```
+
+Current production validation status:
+
+- Laravel migrations apply cleanly.
+- Full Pest suite passes with one intentionally skipped test.
+- Production frontend build completes.
+- Runtime npm audit is clean with `--omit=dev`.
+- Composer audit reports no known advisories.
 
 ## Supplier Service API
 
@@ -179,6 +223,8 @@ Platform administrators do not belong to a supplier and are redirected to the pl
 
 Two-factor authentication and passkeys have been removed from the application and database schema.
 
+Email verification and remember-me authentication are not used. The `users` table does not include `email_verified_at` or `remember_token`.
+
 ## Access Control
 
 The application distinguishes platform users from supplier-scoped users through `users.supplier_id`.
@@ -190,6 +236,18 @@ The application distinguishes platform users from supplier-scoped users through 
 - The sidebar only shows `Proveedores` to platform users.
 
 Supplier-scoped pages automatically use the authenticated user's supplier. Platform users can select a supplier where the workflow requires it.
+
+Portal roles are stored in the `roles` table and linked from `users.role_id`. The legacy `users.role` code is still maintained for policy compatibility.
+
+Seeded role codes:
+
+- `super_admin`
+- `admin`
+- `auditor`
+- `supplier_admin`
+- `supplier_reservations`
+- `supplier_pricing`
+- `supplier_user`
 
 ## Location Catalog Search
 

@@ -22,3 +22,7 @@ yarn-error.log
 /.nova
 /.vscode
 /.zed
+.claude/settings.json
+.playwright-cli/
+.playwright-mcp/
+docs/*.xlsx
