@@ -37,14 +37,29 @@ test('supplier admins do not see suppliers menu in the sidebar', function () {
         ->assertDontSee(__('Proveedores'));
 });
 
-test('portal placeholder pages are available to authenticated users', function (string $routeName, string $title) {
+test('portal status page shows recovery checks to authenticated users', function () {
     $user = User::factory()->create();
 
     $this->actingAs($user)
-        ->get(route($routeName))
+        ->get(route('portal.status'))
         ->assertOk()
-        ->assertSee($title)
-        ->assertSee(__('Pendiente de conectar con el módulo correspondiente.'));
-})->with([
-    'status' => ['portal.status', 'Estado'],
-]);
+        ->assertSee(__('Estado'))
+        ->assertSee(__('Resumen operativo'))
+        ->assertSee(__('Base de datos'))
+        ->assertDontSee(__('Pendiente de conectar con el módulo correspondiente.'));
+});
+
+test('portal status page renders when configured redis client is unavailable', function () {
+    $user = User::factory()->create();
+
+    config([
+        'cache.default' => 'redis',
+        'database.redis.client' => 'phpredis',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('portal.status'))
+        ->assertOk()
+        ->assertSee(__('Redis'))
+        ->assertSee(__('Redis client is not installed for the configured driver.'));
+})->skip(class_exists('Redis'), 'PhpRedis is installed in this environment.');

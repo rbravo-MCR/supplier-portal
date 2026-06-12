@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureHealthSecret;
 use App\Http\Middleware\EnsureTeamMembership;
 use App\Models\Supplier;
 use App\Modules\System\Application\Services\HealthCheckService;
@@ -19,36 +20,38 @@ Route::get('/', function () {
     return to_route('admin.dashboard');
 })->name('home');
 
-Route::get('health', fn (HealthCheckService $health) => response()->json($health->all()))
-    ->name('health');
+Route::middleware([EnsureHealthSecret::class])->group(function () {
+    Route::get('health', fn (HealthCheckService $health) => response()->json($health->all()))
+        ->name('health');
 
-Route::get('health/db', fn (HealthCheckService $health) => response()->json($health->database()))
-    ->name('health.db');
+    Route::get('health/db', fn (HealthCheckService $health) => response()->json($health->database()))
+        ->name('health.db');
 
-Route::get('health/redis', fn (HealthCheckService $health) => response()->json($health->redis()))
-    ->name('health.redis');
+    Route::get('health/redis', fn (HealthCheckService $health) => response()->json($health->redis()))
+        ->name('health.redis');
 
-Route::get('health/queue', fn (HealthCheckService $health) => response()->json($health->queue()))
-    ->name('health.queue');
+    Route::get('health/queue', fn (HealthCheckService $health) => response()->json($health->queue()))
+        ->name('health.queue');
 
-Route::get('health/storage', fn (HealthCheckService $health) => response()->json($health->storage()))
-    ->name('health.storage');
+    Route::get('health/storage', fn (HealthCheckService $health) => response()->json($health->storage()))
+        ->name('health.storage');
 
-Route::get('health/outbox', fn (HealthCheckService $health) => response()->json($health->outbox()))
-    ->name('health.outbox');
+    Route::get('health/outbox', fn (HealthCheckService $health) => response()->json($health->outbox()))
+        ->name('health.outbox');
 
-Route::get('health/failed-jobs', fn (HealthCheckService $health) => response()->json($health->failedJobs()))
-    ->name('health.failed-jobs');
+    Route::get('health/failed-jobs', fn (HealthCheckService $health) => response()->json($health->failedJobs()))
+        ->name('health.failed-jobs');
+});
 
 Route::view('admin', 'dashboard')
-    ->middleware(['auth', 'verified'])
+    ->middleware(['auth'])
     ->name('admin.dashboard');
 
 Route::view('supplier', 'dashboard')
-    ->middleware(['auth', 'verified'])
+    ->middleware(['auth'])
     ->name('supplier.dashboard');
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth'])->group(function () {
     Route::livewire('bookings', 'pages::bookings')->name('portal.bookings');
 
     Route::livewire('prices', 'pages::pricing')->name('portal.prices');
@@ -77,14 +80,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     Route::livewire('audit', 'pages::audit')->name('portal.audit');
 
-    Route::view('status', 'portal-placeholder', [
-        'title' => __('Estado'),
-        'description' => __('Consulta salud del sistema, cola, storage, outbox y jobs fallidos.'),
-    ])->name('portal.status');
+    Route::get('status', fn (HealthCheckService $health) => view('portal-status', [
+        'health' => $health->all(),
+    ]))->name('portal.status');
 });
 
 Route::prefix('{current_team}')
-    ->middleware(['auth', 'verified', EnsureTeamMembership::class])
+    ->middleware(['auth', EnsureTeamMembership::class])
     ->group(function () {
         Route::view('dashboard', 'dashboard')->name('dashboard');
     });

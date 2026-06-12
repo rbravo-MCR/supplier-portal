@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Concerns\HasTeams;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -15,12 +14,17 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
-#[Fillable(['name', 'username', 'email', 'password', 'current_team_id', 'supplier_id', 'role', 'status'])]
-#[Hidden(['password', 'remember_token'])]
+#[Fillable(['name', 'username', 'email', 'password', 'current_team_id', 'supplier_id', 'role_id', 'role', 'status'])]
+#[Hidden(['password'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasTeams, Notifiable;
+
+    /**
+     * Disable remember_token — column was removed intentionally.
+     */
+    protected $rememberTokenName = '';
 
     /**
      * Bootstrap the model and its traits.
@@ -69,6 +73,16 @@ class User extends Authenticatable
     }
 
     /**
+     * Get the assigned portal role.
+     *
+     * @return BelongsTo<Role, $this>
+     */
+    public function portalRole(): BelongsTo
+    {
+        return $this->belongsTo(Role::class, 'role_id');
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -76,7 +90,6 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'last_login_at' => 'datetime',
         ];

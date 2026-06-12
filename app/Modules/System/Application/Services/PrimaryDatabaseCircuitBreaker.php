@@ -3,6 +3,7 @@
 namespace App\Modules\System\Application\Services;
 
 use Illuminate\Support\Facades\Cache;
+use Throwable;
 
 class PrimaryDatabaseCircuitBreaker
 {
@@ -76,7 +77,11 @@ class PrimaryDatabaseCircuitBreaker
      */
     public function state(): array
     {
-        $state = Cache::get(self::CACHE_KEY);
+        try {
+            $state = Cache::get(self::CACHE_KEY);
+        } catch (Throwable) {
+            $state = null;
+        }
 
         if ($state === null) {
             return [
@@ -98,7 +103,10 @@ class PrimaryDatabaseCircuitBreaker
      */
     public function reset(): void
     {
-        Cache::forget(self::CACHE_KEY);
+        try {
+            Cache::forget(self::CACHE_KEY);
+        } catch (Throwable) {
+        }
     }
 
     /**
@@ -116,6 +124,9 @@ class PrimaryDatabaseCircuitBreaker
      */
     private function write(array $state): void
     {
-        Cache::put(self::CACHE_KEY, $state, self::CACHE_TTL_SECONDS);
+        try {
+            Cache::put(self::CACHE_KEY, $state, self::CACHE_TTL_SECONDS);
+        } catch (Throwable) {
+        }
     }
 }

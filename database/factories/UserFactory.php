@@ -3,11 +3,11 @@
 namespace Database\Factories;
 
 use App\Enums\TeamRole;
+use App\Models\Role;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 
 /**
  * @extends Factory<User>
@@ -32,9 +32,8 @@ class UserFactory extends Factory
             'name' => fake()->name(),
             'username' => str($email)->before('@')->lower()->toString(),
             'email' => $email,
-            'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
-            'remember_token' => Str::random(10),
+            'role_id' => Role::query()->where('code', 'admin')->value('id'),
             'role' => 'admin',
             'status' => 'active',
             'supplier_id' => null,
@@ -57,15 +56,5 @@ class UserFactory extends Factory
 
             $user->switchTeam($team);
         });
-    }
-
-    /**
-     * Indicate that the model's email address should be unverified.
-     */
-    public function unverified(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'email_verified_at' => null,
-        ]);
     }
 }

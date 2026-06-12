@@ -3,9 +3,9 @@
     <head>
         @include('partials.head')
     </head>
-    <body class="min-h-screen bg-zinc-100 antialiased">
+    <body class="min-h-screen bg-zinc-100 text-zinc-950 antialiased">
         <div class="flex min-h-svh items-center justify-center p-6 md:p-10">
-            <div class="w-full max-w-md rounded-lg border border-zinc-200 bg-white px-8 py-8 shadow-sm">
+            <div class="w-full max-w-md rounded-lg border border-zinc-200 bg-white px-8 py-8 text-zinc-950 shadow-sm">
                 <div class="flex flex-col gap-7">
                     <a href="{{ route('home') }}" class="flex justify-center" wire:navigate>
                         <span class="flex h-20 w-72 items-center justify-center">

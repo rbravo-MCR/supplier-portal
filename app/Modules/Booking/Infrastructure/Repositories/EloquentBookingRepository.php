@@ -44,6 +44,19 @@ class EloquentBookingRepository implements BookingRepository
     }
 
     /**
+     * Find a booking owned by a supplier, acquiring a write lock for concurrent operations.
+     * Must be called within an active database transaction.
+     */
+    public function findForSupplierForUpdate(int $bookingId, int $supplierId): ?Booking
+    {
+        return Booking::query()
+            ->where('supplier_id', $supplierId)
+            ->whereKey($bookingId)
+            ->lockForUpdate()
+            ->first();
+    }
+
+    /**
      * Persist the booking status.
      */
     public function updateStatus(Booking $booking, string $status): Booking

@@ -16,12 +16,14 @@ class HealthCheckService
 
     private const CACHE_TTL_SECONDS = 60;
 
+    private const FAILURE_MESSAGE = 'Health check failed. Review application logs for details.';
+
     /**
      * Get aggregate system health.
      */
     public function all(): array
     {
-        return Cache::remember('health.checks.all', self::CACHE_TTL_SECONDS, function () {
+        return $this->remember('health.checks.all', function () {
             $checks = [
                 'db' => $this->database(),
                 'redis' => $this->redis(),
@@ -47,15 +49,17 @@ class HealthCheckService
      */
     public function database(): array
     {
-        return Cache::remember('health.check.db', self::CACHE_TTL_SECONDS, function () {
+        return $this->remember('health.check.db', function () {
             try {
                 DB::connection()->getPdo();
 
                 return ['status' => 'healthy'];
             } catch (Throwable $exception) {
+                report($exception);
+
                 return [
                     'status' => 'down',
-                    'error' => $exception->getMessage(),
+                    'message' => self::FAILURE_MESSAGE,
                 ];
             }
         });
@@ -66,15 +70,24 @@ class HealthCheckService
      */
     public function redis(): array
     {
-        return Cache::remember('health.check.redis', self::CACHE_TTL_SECONDS, function () {
+        return $this->remember('health.check.redis', function () {
             try {
+                if ($this->redisClientIsUnavailable()) {
+                    return [
+                        'status' => 'degraded',
+                        'message' => 'Redis client is not installed for the configured driver.',
+                    ];
+                }
+
                 Redis::connection()->ping();
 
                 return ['status' => 'healthy'];
             } catch (Throwable $exception) {
+                report($exception);
+
                 return [
                     'status' => 'degraded',
-                    'error' => $exception->getMessage(),
+                    'message' => self::FAILURE_MESSAGE,
                 ];
             }
         });
@@ -85,15 +98,17 @@ class HealthCheckService
      */
     public function queue(): array
     {
-        return Cache::remember('health.check.queue', self::CACHE_TTL_SECONDS, function () {
+        return $this->remember('health.check.queue', function () {
             try {
                 Queue::connection()->getConnectionName();
 
                 return ['status' => 'healthy'];
             } catch (Throwable $exception) {
+                report($exception);
+
                 return [
                     'status' => 'degraded',
-                    'error' => $exception->getMessage(),
+                    'message' => self::FAILURE_MESSAGE,
                 ];
             }
         });
@@ -104,15 +119,17 @@ class HealthCheckService
      */
     public function storage(): array
     {
-        return Cache::remember('health.check.storage', self::CACHE_TTL_SECONDS, function () {
+        return $this->remember('health.check.storage', function () {
             try {
                 Storage::disk()->exists('.');
 
                 return ['status' => 'healthy'];
             } catch (Throwable $exception) {
+                report($exception);
+
                 return [
                     'status' => 'down',
-                    'error' => $exception->getMessage(),
+                    'message' => self::FAILURE_MESSAGE,
                 ];
             }
         });
@@ -123,14 +140,14 @@ class HealthCheckService
      */
     public function outbox(): array
     {
-        return Cache::remember('health.check.outbox', self::CACHE_TTL_SECONDS, function () {
+        return $this->remember('health.check.outbox', function () {
             try {
                 if (! Schema::hasTable('outbox_events')) {
                     return [
                         'status' => 'degraded',
                         'pending_operations' => null,
                         'threshold' => self::OUTBOX_PENDING_THRESHOLD,
-                        'error' => 'outbox_events table is missing',
+                        'message' => 'Required health table is missing.',
                     ];
                 }
 
@@ -144,11 +161,13 @@ class HealthCheckService
                     'threshold' => self::OUTBOX_PENDING_THRESHOLD,
                 ];
             } catch (Throwable $exception) {
+                report($exception);
+
                 return [
                     'status' => 'degraded',
                     'pending_operations' => null,
                     'threshold' => self::OUTBOX_PENDING_THRESHOLD,
-                    'error' => $exception->getMessage(),
+                    'message' => self::FAILURE_MESSAGE,
                 ];
             }
         });
@@ -159,13 +178,13 @@ class HealthCheckService
      */
     public function failedJobs(): array
     {
-        return Cache::remember('health.check.failed_jobs', self::CACHE_TTL_SECONDS, function () {
+        return $this->remember('health.check.failed_jobs', function () {
             try {
                 if (! Schema::hasTable('failed_jobs')) {
                     return [
                         'status' => 'degraded',
                         'failed' => null,
-                        'error' => 'failed_jobs table is missing',
+                        'message' => 'Required health table is missing.',
                     ];
                 }
 
@@ -176,12 +195,40 @@ class HealthCheckService
                     'failed' => $failedJobs,
                 ];
             } catch (Throwable $exception) {
+                report($exception);
+
                 return [
                     'status' => 'degraded',
                     'failed' => null,
-                    'error' => $exception->getMessage(),
+                    'message' => self::FAILURE_MESSAGE,
                 ];
             }
         });
+    }
+
+    /**
+     * Cache health data when the configured cache store is available.
+     *
+     * @return array<string, mixed>
+     */
+    private function remember(string $key, callable $resolver): array
+    {
+        try {
+            return Cache::remember($key, self::CACHE_TTL_SECONDS, $resolver);
+        } catch (Throwable) {
+            return $resolver();
+        }
+    }
+
+    /**
+     * Determine whether the configured Redis client can be loaded.
+     */
+    private function redisClientIsUnavailable(): bool
+    {
+        return match (config('database.redis.client')) {
+            'phpredis' => ! class_exists('Redis'),
+            'predis' => ! class_exists('Predis\Client'),
+            default => false,
+        };
     }
 }

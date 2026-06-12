@@ -9,10 +9,7 @@ trait WithSearchableCatalog
     /**
      * Apply a search filter to a query builder using LIKE.
      *
-     * @param  Builder  $query
-     * @param  string  $term
      * @param  list<string>  $columns
-     * @return Builder
      */
     public function applySearchFilter(Builder $query, string $term, array $columns): Builder
     {
@@ -30,10 +27,7 @@ trait WithSearchableCatalog
     /**
      * Apply a search filter to a query builder using exact match.
      *
-     * @param  Builder  $query
-     * @param  string  $term
      * @param  list<string>  $columns
-     * @return Builder
      */
     public function applySearchFilterExact(Builder $query, string $term, array $columns): Builder
     {

@@ -27,7 +27,7 @@ class RateImportSpreadsheet
      */
     public function read(string $path): array
     {
-        $archive = new ZipArchive();
+        $archive = new ZipArchive;
 
         if ($archive->open($path) !== true) {
             throw new RuntimeException('No se pudo leer el archivo Excel.');

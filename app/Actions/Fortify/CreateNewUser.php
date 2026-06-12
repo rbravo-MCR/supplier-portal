@@ -5,6 +5,7 @@ namespace App\Actions\Fortify;
 use App\Actions\Teams\CreateTeam;
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
+use App\Models\Role;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
@@ -34,14 +35,21 @@ class CreateNewUser implements CreatesNewUsers
         ])->validate();
 
         return DB::transaction(function () use ($input) {
+            $role = Role::query()
+                ->select(['id', 'code'])
+                ->where('code', 'supplier_admin')
+                ->where('status', 'active')
+                ->firstOrFail();
+
             $user = User::create([
                 'name' => $input['name'],
                 'username' => $input['username'],
                 'email' => $input['email'],
                 'password' => $input['password'],
                 'supplier_id' => $input['supplier_id'],
-                'role' => 'supplier_admin',
-                'status' => 'active',
+                'role_id' => $role->id,
+                'role' => $role->code,
+                'status' => 'inactive',
             ]);
 
             $this->createTeam->handle($user, $user->name."'s Team", isPersonal: true);

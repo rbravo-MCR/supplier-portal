@@ -1,6 +1,7 @@
 <?php
 
 use App\Concerns\RemembersModelRows;
+use App\Models\Role;
 use App\Models\Supplier;
 use App\Models\User;
 use Flux\Flux;
@@ -51,20 +52,25 @@ new #[Title('Usuarios')] class extends Component {
             'username' => ['required', 'string', 'lowercase', 'alpha_dash:ascii', 'max:255', Rule::unique('users', 'username')],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'string', 'min:8', 'max:255'],
-            'role' => ['required', Rule::in(['admin', 'supplier_admin', 'supplier_reservations', 'supplier_pricing'])],
+            'role' => ['required', Rule::in($this->allowedRoleCodes()), Rule::exists('roles', 'code')->where('status', 'active')],
             'status' => ['required', Rule::in(['active', 'inactive'])],
         ]);
 
         $supplierId = Auth::user()->supplier_id ?: $validated['supplierId'];
+        $role = Role::query()
+            ->select(['id', 'code'])
+            ->where('code', $validated['role'])
+            ->where('status', 'active')
+            ->firstOrFail();
 
         User::query()->create([
             'supplier_id' => $supplierId,
             'name' => $validated['name'],
             'username' => str($validated['username'])->lower()->toString(),
             'email' => str($validated['email'])->lower()->toString(),
-            'email_verified_at' => now(),
             'password' => $validated['password'],
-            'role' => $validated['role'],
+            'role_id' => $role->id,
+            'role' => $role->code,
             'status' => $validated['status'],
         ]);
 
@@ -91,11 +97,36 @@ new #[Title('Usuarios')] class extends Component {
         });
     }
 
+    /**
+     * @return Collection<int, Role>
+     */
+    #[Computed]
+    public function roles(): Collection
+    {
+        return Role::query()
+            ->select(['id', 'code', 'name'])
+            ->where('status', 'active')
+            ->whereIn('code', $this->allowedRoleCodes())
+            ->orderByRaw("case scope when 'platform' then 0 else 1 end")
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function allowedRoleCodes(): array
+    {
+        return Auth::user()->supplier_id
+            ? ['supplier_admin', 'supplier_reservations', 'supplier_pricing']
+            : ['admin', 'supplier_admin', 'supplier_reservations', 'supplier_pricing'];
+    }
+
     #[Computed]
     public function users(): LengthAwarePaginator
     {
         return User::query()
-            ->with('supplier:id,name,code')
+            ->with(['supplier:id,name,code', 'portalRole:id,name,code'])
             ->forSupplier(Auth::user()->supplier_id)
             ->when($this->search !== '', function (Builder $query): void {
                 $query->search($this->search);
@@ -131,12 +162,9 @@ new #[Title('Usuarios')] class extends Component {
             @endif
 
             <flux:select wire:model="role" :label="__('Rol')" data-test="user-role">
-                @if (! Auth::user()->supplier_id)
-                    <flux:select.option value="admin">{{ __('Administrador plataforma') }}</flux:select.option>
-                @endif
-                <flux:select.option value="supplier_admin">{{ __('Administrador') }}</flux:select.option>
-                <flux:select.option value="supplier_reservations">{{ __('Reservas') }}</flux:select.option>
-                <flux:select.option value="supplier_pricing">{{ __('Precios') }}</flux:select.option>
+                @foreach ($this->roles as $role)
+                    <flux:select.option :value="$role->code">{{ $role->name }}</flux:select.option>
+                @endforeach
             </flux:select>
 
             <flux:select wire:model="status" :label="__('Estado')" data-test="user-status">
@@ -182,7 +210,7 @@ new #[Title('Usuarios')] class extends Component {
                         <flux:table.cell>{{ $user->supplier?->code ?? __('Plataforma') }}</flux:table.cell>
                         <flux:table.cell>
                             <flux:badge :color="$user->role === 'admin' ? 'blue' : 'zinc'">
-                                {{ match ($user->role) {
+                                {{ $user->portalRole?->name ?? match ($user->role) {
                                     'admin' => __('Administrador plataforma'),
                                     'supplier_admin' => __('Administrador'),
                                     'supplier_pricing' => __('Precios'),

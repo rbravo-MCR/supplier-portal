@@ -51,10 +51,7 @@
                 />
             </div>
 
-            <div class="flex items-center justify-between gap-4">
-                <!-- Remember Me -->
-                <flux:checkbox name="remember" :label="__('Recordar este equipo')" :checked="old('remember')" />
-
+            <div class="flex items-center justify-end">
                 @if (Route::has('password.request'))
                     <flux:link class="text-sm font-medium text-sky-700! hover:text-sky-800!" :href="route('password.request')" wire:navigate>
                         {{ __('Recuperar acceso') }}

@@ -15,7 +15,7 @@ test('login screen can be rendered', function () {
         ->assertDontSee('Selecciona proveedor')
         ->assertSee('name="username"', false)
         ->assertSee('name="password"', false)
-        ->assertSee('name="remember"', false)
+        ->assertDontSee('name="remember"', false)
         ->assertSee('[&_[data-flux-label]]:text-zinc-900', false)
         ->assertSee('placeholder:text-zinc-600!', false)
         ->assertDontSee('Administración interna');

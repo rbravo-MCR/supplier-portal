@@ -1,11 +1,37 @@
 <?php
 
+use App\Http\Middleware\EnsurePrimaryDatabaseIsAvailable;
 use App\Models\OutboxEvent;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Modules\System\Application\Services\HealthCheckService;
 use App\Shared\Support\StructuredLogContext;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+
+test('health endpoints require token when HEALTH_SECRET is configured', function (string $endpoint) {
+    config(['app.health_secret' => 'super-secret']);
+
+    $this->getJson($endpoint)->assertUnauthorized();
+})->with(['/health', '/health/db', '/health/redis', '/health/queue', '/health/storage', '/health/outbox', '/health/failed-jobs']);
+
+test('health endpoints accept valid bearer token', function () {
+    config(['app.health_secret' => 'super-secret']);
+
+    $this->withToken('super-secret')->getJson('/health')->assertOk();
+});
+
+test('health endpoints accept valid X-Health-Secret header', function () {
+    config(['app.health_secret' => 'super-secret']);
+
+    $this->withHeaders(['X-Health-Secret' => 'super-secret'])->getJson('/health')->assertOk();
+});
+
+test('health endpoints are public when HEALTH_SECRET is not configured', function () {
+    config(['app.health_secret' => null]);
+
+    $this->getJson('/health')->assertOk();
+});
 
 test('health endpoint returns aggregate status', function () {
     $this->getJson('/health')
@@ -35,6 +61,26 @@ test('individual health endpoints return component status', function (string $en
     '/health/outbox',
     '/health/failed-jobs',
 ]);
+
+test('health checks do not expose technical exception details', function () {
+    Cache::forget('health.check.db');
+
+    $this->withoutMiddleware(EnsurePrimaryDatabaseIsAvailable::class);
+
+    DB::shouldReceive('connection')
+        ->once()
+        ->andThrow(new RuntimeException('SQLSTATE[08006]: failed at /internal/path for secret-host'));
+
+    $this->getJson('/health/db')
+        ->assertOk()
+        ->assertJson([
+            'status' => 'down',
+            'message' => 'Health check failed. Review application logs for details.',
+        ])
+        ->assertDontSee('SQLSTATE')
+        ->assertDontSee('/internal/path')
+        ->assertDontSee('secret-host');
+});
 
 test('store and forward health degrades when pending operations exceed the runbook threshold', function () {
     OutboxEvent::factory()

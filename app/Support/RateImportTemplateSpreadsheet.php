@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\Supplier;
+use Illuminate\Support\Collection;
 use ZipArchive;
 
 class RateImportTemplateSpreadsheet
@@ -13,7 +14,7 @@ class RateImportTemplateSpreadsheet
     public function create(Supplier $supplier): string
     {
         $path = tempnam(sys_get_temp_dir(), 'rate-template-');
-        $archive = new ZipArchive();
+        $archive = new ZipArchive;
         $archive->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE);
 
         $rows = [
@@ -130,7 +131,7 @@ XML);
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, string>  $strings
+     * @param  Collection<int, string>  $strings
      */
     protected function addSharedStrings(ZipArchive $archive, $strings): void
     {
@@ -143,7 +144,7 @@ XML);
 
     /**
      * @param  list<list<string>>  $rows
-     * @param  \Illuminate\Support\Collection<int, string>  $strings
+     * @param  Collection<int, string>  $strings
      */
     protected function addSheet(ZipArchive $archive, array $rows, $strings): void
     {

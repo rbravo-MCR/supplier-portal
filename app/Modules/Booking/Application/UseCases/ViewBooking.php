@@ -27,7 +27,7 @@ class ViewBooking
         $booking = $this->bookings->find($bookingId);
 
         if (! $booking instanceof Booking) {
-            throw (new ModelNotFoundException())->setModel(Booking::class, [$bookingId]);
+            throw (new ModelNotFoundException)->setModel(Booking::class, [$bookingId]);
         }
 
         if (! Gate::forUser($actor)->allows('view', $booking)) {
@@ -45,7 +45,7 @@ class ViewBooking
                 ],
             ]));
 
-            throw new AuthorizationException();
+            throw new AuthorizationException;
         }
 
         return $booking;

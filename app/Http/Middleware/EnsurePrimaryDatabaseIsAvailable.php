@@ -61,7 +61,7 @@ class EnsurePrimaryDatabaseIsAvailable
      */
     private function databaseIsHealthy(): bool
     {
-        return cache()->remember('db.health', 5, function (): bool {
+        $healthCheck = function (): bool {
             try {
                 $this->assertDatabaseIsAvailable();
                 $this->circuitBreaker->recordSuccess();
@@ -72,7 +72,13 @@ class EnsurePrimaryDatabaseIsAvailable
 
                 return false;
             }
-        });
+        };
+
+        try {
+            return cache()->remember('db.health', 5, $healthCheck);
+        } catch (Throwable) {
+            return $healthCheck();
+        }
     }
 
     /**

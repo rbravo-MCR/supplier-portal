@@ -54,6 +54,8 @@ test('users form creates a portal user', function () {
         'role' => 'supplier_pricing',
         'status' => 'active',
     ]);
+
+    expect(User::where('username', 'cperez')->first()->portalRole->code)->toBe('supplier_pricing');
 });
 
 test('users form requires globally unique usernames', function () {

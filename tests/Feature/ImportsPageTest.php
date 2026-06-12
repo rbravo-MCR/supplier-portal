@@ -5,10 +5,10 @@ use App\Models\Supplier;
 use App\Models\User;
 use App\Support\RateImportSpreadsheet;
 use App\Support\RateImportTemplateSpreadsheet;
+use Illuminate\Database\Eloquent\Factories\Sequence;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
-use Illuminate\Database\Eloquent\Factories\Sequence;
 
 test('imports page shows the latest five uploads', function () {
     $supplier = Supplier::factory()->create(['code' => 'DEMO']);
@@ -179,7 +179,7 @@ function excelUpload(array $rows): UploadedFile
 function excelContent(array $rows): string
 {
     $path = tempnam(sys_get_temp_dir(), 'xlsx');
-    $archive = new ZipArchive();
+    $archive = new ZipArchive;
     $archive->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE);
 
     $archive->addFromString('[Content_Types].xml', <<<'XML'

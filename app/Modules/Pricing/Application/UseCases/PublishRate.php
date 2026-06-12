@@ -35,11 +35,11 @@ class PublishRate
 
         $supplierId = $this->supplierContext->id();
 
-        if ($this->rates->hasActiveOverlap($supplierId, $data)) {
-            throw RateOverlapDetected::forRateKey();
-        }
-
         return DB::transaction(function () use ($data, $supplierId): Rate {
+            if ($this->rates->hasActiveOverlap($supplierId, $data)) {
+                throw RateOverlapDetected::forRateKey();
+            }
+
             $rate = $this->rates->create(
                 supplierId: $supplierId,
                 data: $data,
@@ -61,7 +61,7 @@ class PublishRate
                     'base_price' => $rate->base_price,
                     'version' => $rate->version,
                 ],
-            ]));
+            ]))->afterCommit();
 
             dispatch(new DispatchOutboxEvent([
                 'aggregate_type' => Rate::class,
@@ -75,7 +75,7 @@ class PublishRate
                 ],
                 'status' => 'pending',
                 'available_at' => now(),
-            ]));
+            ]))->afterCommit();
 
             return $rate;
         });

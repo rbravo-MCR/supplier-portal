@@ -29,17 +29,18 @@ class ConfirmBooking
     public function handle(ConfirmBookingData $data): Booking
     {
         $supplierId = $this->supplierContext->id();
-        $booking = $this->bookings->findForSupplier($data->bookingId, $supplierId);
 
-        if (! $booking instanceof Booking) {
-            throw (new ModelNotFoundException())->setModel(Booking::class, [$data->bookingId]);
-        }
+        return DB::transaction(function () use ($data, $supplierId): Booking {
+            $booking = $this->bookings->findForSupplierForUpdate($data->bookingId, $supplierId);
 
-        if ($booking->status !== 'pending') {
-            throw BookingMustBePending::forOperation('confirmed');
-        }
+            if (! $booking instanceof Booking) {
+                throw (new ModelNotFoundException)->setModel(Booking::class, [$data->bookingId]);
+            }
 
-        return DB::transaction(function () use ($booking, $data, $supplierId): Booking {
+            if ($booking->status !== 'pending') {
+                throw BookingMustBePending::forOperation('confirmed');
+            }
+
             $confirmed = $this->bookings->updateStatus($booking, 'confirmed');
 
             dispatch(new RecordBookingAction([
@@ -47,7 +48,7 @@ class ConfirmBooking
                 'supplier_id' => $supplierId,
                 'user_id' => $data->userId,
                 'action' => 'confirmed',
-            ]));
+            ]))->afterCommit();
 
             dispatch(new RecordAuditLog([
                 'supplier_id' => $supplierId,
@@ -58,7 +59,7 @@ class ConfirmBooking
                 'entity_id' => $confirmed->id,
                 'old_values' => ['status' => 'pending'],
                 'new_values' => ['status' => 'confirmed'],
-            ]));
+            ]))->afterCommit();
 
             $occurredAt = now()->toISOString();
 
@@ -75,7 +76,7 @@ class ConfirmBooking
                 ],
                 'status' => 'pending',
                 'available_at' => now(),
-            ]));
+            ]))->afterCommit();
 
             return $confirmed;
         });

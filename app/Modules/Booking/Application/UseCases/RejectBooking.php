@@ -38,17 +38,18 @@ class RejectBooking
         }
 
         $supplierId = $this->supplierContext->id();
-        $booking = $this->bookings->findForSupplier($data->bookingId, $supplierId);
 
-        if (! $booking instanceof Booking) {
-            throw (new ModelNotFoundException())->setModel(Booking::class, [$data->bookingId]);
-        }
+        return DB::transaction(function () use ($data, $reason, $supplierId): Booking {
+            $booking = $this->bookings->findForSupplierForUpdate($data->bookingId, $supplierId);
 
-        if ($booking->status !== 'pending') {
-            throw BookingMustBePending::forOperation('rejected');
-        }
+            if (! $booking instanceof Booking) {
+                throw (new ModelNotFoundException)->setModel(Booking::class, [$data->bookingId]);
+            }
 
-        return DB::transaction(function () use ($booking, $data, $reason, $supplierId): Booking {
+            if ($booking->status !== 'pending') {
+                throw BookingMustBePending::forOperation('rejected');
+            }
+
             $rejected = $this->bookings->updateStatus($booking, 'rejected');
 
             dispatch(new RecordBookingAction([
@@ -57,7 +58,7 @@ class RejectBooking
                 'user_id' => $data->userId,
                 'action' => 'rejected',
                 'reason' => $reason,
-            ]));
+            ]))->afterCommit();
 
             dispatch(new RecordAuditLog([
                 'supplier_id' => $supplierId,
@@ -68,7 +69,7 @@ class RejectBooking
                 'entity_id' => $rejected->id,
                 'old_values' => ['status' => 'pending'],
                 'new_values' => ['status' => 'rejected', 'reason' => $reason],
-            ]));
+            ]))->afterCommit();
 
             $occurredAt = now()->toISOString();
 
@@ -86,7 +87,7 @@ class RejectBooking
                 ],
                 'status' => 'pending',
                 'available_at' => now(),
-            ]));
+            ]))->afterCommit();
 
             return $rejected;
         });

@@ -219,6 +219,43 @@ test('database circuit breaker probe closes the circuit when postgres recovers',
     expect(Cache::has('circuit_breaker.primary_database'))->toBeFalse();
 });
 
+test('api middleware returns 503 json when primary database is unavailable', function () {
+    config([
+        'incident-fallback.database_check.max_attempts' => 1,
+        'incident-fallback.database_check.retry_sleep_ms' => 0,
+        'incident-fallback.circuit_breaker.enabled' => false,
+    ]);
+
+    DB::shouldReceive('connection')
+        ->once()
+        ->andThrow(new PDOException('Connection refused'));
+
+    $this->postJson('/api/supplier-service/bookings', [], [
+        'Authorization' => 'Bearer '.config('services.supplier_service.token'),
+    ])
+        ->assertServiceUnavailable()
+        ->assertJsonStructure(['message', 'incident_id']);
+});
+
+test('api middleware returns 503 json when circuit breaker is open', function () {
+    Cache::flush();
+    config([
+        'incident-fallback.circuit_breaker.enabled' => true,
+        'incident-fallback.circuit_breaker.failure_threshold' => 1,
+        'incident-fallback.circuit_breaker.open_seconds' => 30,
+    ]);
+
+    app(PrimaryDatabaseCircuitBreaker::class)->recordFailure();
+
+    DB::shouldReceive('connection')->never();
+
+    $this->postJson('/api/supplier-service/bookings', [], [
+        'Authorization' => 'Bearer '.config('services.supplier_service.token'),
+    ])
+        ->assertServiceUnavailable()
+        ->assertJsonStructure(['message', 'incident_id']);
+});
+
 test('database circuit breaker probe is scheduled every minute', function () {
     $this->artisan('schedule:list')
         ->expectsOutputToContain('system:database-circuit-probe')

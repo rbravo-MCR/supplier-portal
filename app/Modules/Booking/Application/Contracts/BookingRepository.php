@@ -23,6 +23,12 @@ interface BookingRepository
     public function findForSupplier(int $bookingId, int $supplierId): ?Booking;
 
     /**
+     * Find a booking owned by a supplier, acquiring a write lock for concurrent operations.
+     * Must be called within an active database transaction.
+     */
+    public function findForSupplierForUpdate(int $bookingId, int $supplierId): ?Booking;
+
+    /**
      * Persist the booking status.
      */
     public function updateStatus(Booking $booking, string $status): Booking;

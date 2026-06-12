@@ -6,7 +6,7 @@ The platform centralizes manual supplier operations, Excel-based uploads, tracea
 
 ## Stack
 
-- PHP 8.3+
+- PHP 8.5
 - Laravel 13
 - Livewire 4
 - Flux UI 2
@@ -69,6 +69,100 @@ Run the Composer CI check:
 ```bash
 composer run ci:check
 ```
+
+## Supplier Service API
+
+Two JSON endpoints receive push data from the external supplier service. Both require an `Authorization: Bearer <token>` header matching `SUPPLIER_SERVICE_TOKEN`. Requests are throttled at 120 per minute.
+
+**Create or update a booking:**
+
+```
+POST /api/supplier-service/bookings
+```
+
+```json
+{
+  "supplier_code": "AGA",
+  "reservation_code": "RES-001",
+  "customer_name": "Juan Pérez",
+  "vehicle_class": "ECAR",
+  "pickup_office_code": "GDLMX01",
+  "dropoff_office_code": "GDLMX01",
+  "pickup_at": "2026-07-01 10:00:00",
+  "dropoff_at": "2026-07-05 10:00:00",
+  "total_amount": 1250.00,
+  "currency": "MXN"
+}
+```
+
+Returns `201` on creation, `200` on update. The `reservation_code` is the idempotency key per supplier.
+
+**Upsert vehicle availability (batch up to 500 items):**
+
+```
+POST /api/supplier-service/vehicle-availability
+```
+
+```json
+{
+  "supplier_code": "AGA",
+  "items": [
+    {
+      "office_code": "GDLMX01",
+      "vehicle_class": "ECONOMY",
+      "acriss_code": "ECAR",
+      "available_quantity": 5,
+      "valid_from": "2026-07-01",
+      "valid_to": "2026-07-31",
+      "status": "available"
+    }
+  ]
+}
+```
+
+Each item can use `office_code` or `iata_code` (not both). Location type is inferred automatically.
+
+## Observability
+
+Health check endpoints expose system component status. They are protected by `HEALTH_SECRET` when configured:
+
+```
+GET /health           # aggregate status
+GET /health/db
+GET /health/redis
+GET /health/queue
+GET /health/storage
+GET /health/outbox
+GET /health/failed-jobs
+```
+
+Set `HEALTH_SECRET` in `.env` to require a bearer token from monitoring tools:
+
+```
+Authorization: Bearer <secret>
+```
+
+or:
+
+```
+X-Health-Secret: <secret>
+```
+
+When `HEALTH_SECRET` is empty, the endpoints are public (suitable for load balancer probes that already use `/up`).
+
+The internal portal status page at `/status` is always auth-protected.
+
+## Resilience
+
+**Database circuit breaker** protects both web and API routes. When the primary database is unavailable:
+
+- Requests return `503` with `{"message": "...", "incident_id": "INC-..."}`.
+- The circuit opens after `APP_DB_CIRCUIT_BREAKER_FAILURE_THRESHOLD` failures and remains open for `APP_DB_CIRCUIT_BREAKER_OPEN_SECONDS` seconds.
+- Runbook commands: `php artisan system:database-circuit-reset`, `php artisan system:database-circuit-probe`.
+
+**Connection timeout** is controlled by `DB_CONNECT_TIMEOUT` (default 5 seconds). This prevents connection hangs from consuming the full PHP execution window before the circuit breaker can respond.
+
+**Error handling** — all unhandled exceptions in production return `503` with a safe incident message. No stack traces, internal paths, or exception details are exposed. Debug mode shows full details only in non-production environments.
 
 ## Authentication
 

@@ -11,12 +11,13 @@
                 name="supplier_id"
                 :label="__('Proveedor')"
                 required
+                input:class="text-zinc-950! placeholder:text-zinc-600!"
                 data-test="register-supplier"
             >
                 <flux:select.option value="">{{ __('Selecciona proveedor') }}</flux:select.option>
                 @foreach ($suppliers as $supplier)
                     <flux:select.option :value="$supplier->id" :selected="(string) old('supplier_id') === (string) $supplier->id">
-                        {{ $supplier->name }} · {{ $supplier->code }}
+                        {{ \Illuminate\Support\Str::upper($supplier->name) }}
                     </flux:select.option>
                 @endforeach
             </flux:select>
@@ -31,6 +32,7 @@
                 autofocus
                 autocomplete="name"
                 :placeholder="__('Full name')"
+                input:class="text-zinc-950! placeholder:text-zinc-600!"
             />
 
             <flux:input
@@ -41,6 +43,7 @@
                 required
                 autocomplete="username"
                 placeholder="usuario"
+                input:class="text-zinc-950! placeholder:text-zinc-600!"
             />
 
             <!-- Email Address -->
@@ -52,6 +55,7 @@
                 required
                 autocomplete="email"
                 placeholder="email@example.com"
+                input:class="text-zinc-950! placeholder:text-zinc-600!"
             />
 
             <!-- Password -->
@@ -63,6 +67,7 @@
                 autocomplete="new-password"
                 :placeholder="__('Password')"
                 passwordrules="{{ \Illuminate\Validation\Rules\Password::defaults()->toPasswordRulesString() }}"
+                input:class="text-zinc-950! placeholder:text-zinc-600!"
                 viewable
             />
 
@@ -75,6 +80,7 @@
                 autocomplete="new-password"
                 :placeholder="__('Confirm password')"
                 passwordrules="{{ \Illuminate\Validation\Rules\Password::defaults()->toPasswordRulesString() }}"
+                input:class="text-zinc-950! placeholder:text-zinc-600!"
                 viewable
             />
 

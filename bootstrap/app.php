@@ -31,6 +31,10 @@ return Application::configure(basePath: dirname(__DIR__))
             EnsurePrimaryDatabaseIsAvailable::class,
         ]);
 
+        $middleware->api(prepend: [
+            EnsurePrimaryDatabaseIsAvailable::class,
+        ]);
+
         $middleware->web(append: [
             SetTeamUrlDefaults::class,
         ]);
@@ -54,10 +58,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 return response()->json([
                     'message' => 'Estamos teniendo una intermitencia temporal.',
                     'incident_id' => $incidentId,
-                ], 500);
+                ], 503);
             }
 
-            return response($safeMessage, 500)
+            return response($safeMessage, 503)
                 ->header('Content-Type', 'text/plain; charset=UTF-8');
         });
     })->create();

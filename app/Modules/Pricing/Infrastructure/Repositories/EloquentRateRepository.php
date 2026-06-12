@@ -29,22 +29,19 @@ class EloquentRateRepository implements RateRepository
 
     /**
      * Determine whether the proposed validity overlaps an active rate.
+     * Always queries fresh — must reflect rates created within the current transaction.
      */
     public function hasActiveOverlap(int $supplierId, PublishRateData $data): bool
     {
-        $cacheKey = "rate.overlap.{$supplierId}.{$data->officeCode}.{$data->acrissCode}.{$data->ratePlanCode}.{$data->validFrom}.{$data->validTo}";
-
-        return Cache::remember($cacheKey, self::CACHE_TTL_SECONDS, function () use ($supplierId, $data): bool {
-            return Rate::query()
-                ->forSupplier($supplierId)
-                ->where('office_code', $data->officeCode)
-                ->where('acriss_code', $data->acrissCode)
-                ->where('rate_plan_code', $data->ratePlanCode)
-                ->active()
-                ->whereDate('valid_from', '<=', $data->validTo)
-                ->whereDate('valid_to', '>=', $data->validFrom)
-                ->exists();
-        });
+        return Rate::query()
+            ->forSupplier($supplierId)
+            ->where('office_code', $data->officeCode)
+            ->where('acriss_code', $data->acrissCode)
+            ->where('rate_plan_code', $data->ratePlanCode)
+            ->active()
+            ->whereDate('valid_from', '<=', $data->validTo)
+            ->whereDate('valid_to', '>=', $data->validFrom)
+            ->exists();
     }
 
     /**
@@ -103,10 +100,8 @@ class EloquentRateRepository implements RateRepository
      */
     private function clearRateCache(int $supplierId, PublishRateData $data): void
     {
-        $overlapKey = "rate.overlap.{$supplierId}.{$data->officeCode}.{$data->acrissCode}.{$data->ratePlanCode}.{$data->validFrom}.{$data->validTo}";
         $versionKey = "rate.version.{$supplierId}.{$data->officeCode}.{$data->acrissCode}.{$data->ratePlanCode}";
 
-        Cache::forget($overlapKey);
         Cache::forget($versionKey);
     }
 }
