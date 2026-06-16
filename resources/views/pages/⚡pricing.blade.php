@@ -79,7 +79,7 @@ new #[Title('Precios')] class extends Component {
     {
         $supplierId = Auth::user()->supplier_id ?: $this->supplierId;
 
-        if (! $supplierId) {
+        if (!$supplierId) {
             $this->addError('supplierId', __('Selecciona proveedor.'));
 
             return;
@@ -114,7 +114,7 @@ new #[Title('Precios')] class extends Component {
 
         $vehicleCategory = $this->selectedVehicleCategory($supplierId);
 
-        if (! $vehicleCategory) {
+        if (!$vehicleCategory) {
             $this->addError('vehicleCategoryId', __('Selecciona una categoría válida para el proveedor.'));
 
             return;
@@ -132,7 +132,7 @@ new #[Title('Precios')] class extends Component {
             return;
         }
 
-        if (! in_array($acrissCode, $allowedAcrissCodes, true)) {
+        if (!in_array($acrissCode, $allowedAcrissCodes, true)) {
             $this->addError('acrissCode', __('Selecciona un código ACRISS válido para la categoría.'));
 
             return;
@@ -198,7 +198,7 @@ new #[Title('Precios')] class extends Component {
     {
         $supplierId = Auth::user()->supplier_id ?: $this->supplierId;
 
-        if (! $supplierId) {
+        if (!$supplierId) {
             return collect();
         }
 
@@ -220,7 +220,7 @@ new #[Title('Precios')] class extends Component {
     {
         $supplierId = Auth::user()->supplier_id ?: $this->supplierId;
 
-        if (! $supplierId) {
+        if (!$supplierId) {
             return collect();
         }
 
@@ -241,19 +241,33 @@ new #[Title('Precios')] class extends Component {
     {
         $supplierId = Auth::user()->supplier_id ?: $this->supplierId;
 
-        if (! $supplierId || ! $this->vehicleCategoryId) {
+        if (!$supplierId || !$this->vehicleCategoryId) {
             return collect();
         }
 
-        return Cache::remember("acriss_codes.{$this->vehicleCategoryId}", 3600, function () use ($supplierId) {
+        $cacheKey = "acriss_codes.{$this->vehicleCategoryId}";
+        $cachedCodes = Cache::get($cacheKey);
+
+        if (!is_array($cachedCodes)) {
+            Cache::forget($cacheKey);
+
             $vehicleCategory = $this->selectedVehicleCategory($supplierId);
 
-            if (! $vehicleCategory) {
+            if (!$vehicleCategory) {
                 return collect();
             }
 
-            return collect($this->allowedAcrissCodes($vehicleCategory))->sort()->values();
-        });
+            $cachedCodes = collect($this->allowedAcrissCodes($vehicleCategory))
+                ->sort()
+                ->values()
+                ->all();
+
+            Cache::put($cacheKey, $cachedCodes, 3600);
+        }
+
+        return collect($cachedCodes)
+            ->filter(fn(mixed $code): bool => is_string($code))
+            ->values();
     }
 
     /**
@@ -300,7 +314,7 @@ new #[Title('Precios')] class extends Component {
         return Rate::query()
             ->with(['supplier:id,name,code', 'currency:id,code,symbol,decimal_places'])
             ->forSupplier(Auth::user()->supplier_id)
-            ->when($this->status !== 'all', fn (Builder $query) => $query->where('status', $this->status))
+            ->when($this->status !== 'all', fn(Builder $query) => $query->where('status', $this->status))
             ->when($this->search !== '', function (Builder $query): void {
                 $query->search($this->search);
             })
@@ -311,7 +325,7 @@ new #[Title('Precios')] class extends Component {
 
     private function selectedVehicleCategory(?int $supplierId): ?VehicleCategory
     {
-        if (! $supplierId || ! $this->vehicleCategoryId) {
+        if (!$supplierId || !$this->vehicleCategoryId) {
             return null;
         }
 
@@ -330,7 +344,7 @@ new #[Title('Precios')] class extends Component {
     {
         $catalogCodes = $vehicleCategory->catalog?->acrissCodes
             ->pluck('code')
-            ->map(fn (string $code): string => str($code)->upper()->toString())
+            ->map(fn(string $code): string => str($code)->upper()->toString())
             ->all() ?? [];
 
         if ($catalogCodes !== []) {
@@ -353,13 +367,15 @@ new #[Title('Precios')] class extends Component {
         </flux:text>
     </div>
 
-    <form wire:submit="save" class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
+    <form wire:submit="save"
+        class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            @if (! Auth::user()->supplier_id)
+            @if (!Auth::user()->supplier_id)
                 <flux:select wire:model="supplierId" :label="__('Proveedor')" data-test="price-supplier">
                     <flux:select.option value="">{{ __('Selecciona proveedor') }}</flux:select.option>
                     @foreach ($this->suppliers as $supplier)
-                        <flux:select.option :value="$supplier->id">{{ $supplier->name }} · {{ $supplier->code }}</flux:select.option>
+                        <flux:select.option :value="$supplier->id">{{ $supplier->name }} · {{ $supplier->code }}
+                        </flux:select.option>
                     @endforeach
                 </flux:select>
             @endif
@@ -374,33 +390,33 @@ new #[Title('Precios')] class extends Component {
                     </flux:select.option>
                 @endforeach
             </flux:select>
-            <flux:select wire:model.live="vehicleCategoryId" :label="__('Categoría vehículo')" data-test="price-vehicle-category">
+            <flux:select wire:model.live="vehicleCategoryId" :label="__('Categoría vehículo')"
+                data-test="price-vehicle-category">
                 <flux:select.option value="">
                     {{ $this->vehicleCategories->isEmpty() ? __('Sin categorías del proveedor') : __('Selecciona categoría') }}
                 </flux:select.option>
                 @foreach ($this->vehicleCategories as $vehicleCategory)
-                    <flux:select.option :value="$vehicleCategory->id" wire:key="price-vehicle-category-{{ $vehicleCategory->id }}">
-                        {{ $vehicleCategory->catalog?->code ?? $vehicleCategory->code }} · {{ $vehicleCategory->catalog?->name_es ?? $vehicleCategory->name }}
+                    <flux:select.option :value="$vehicleCategory->id"
+                        wire:key="price-vehicle-category-{{ $vehicleCategory->id }}">
+                        {{ $vehicleCategory->catalog?->code ?? $vehicleCategory->code }} ·
+                        {{ $vehicleCategory->catalog?->name_es ?? $vehicleCategory->name }}
                     </flux:select.option>
                 @endforeach
             </flux:select>
-            <flux:select
-                wire:model.live="acrissCode"
-                wire:key="price-acriss-{{ $vehicleCategoryId ?? 'none' }}"
-                :label="__('ACRISS')"
-                :disabled="$this->acrissCodes->isEmpty()"
-                data-test="price-acriss"
-            >
+            <flux:select wire:model.live="acrissCode" wire:key="price-acriss-{{ $vehicleCategoryId ?? 'none' }}"
+                :label="__('ACRISS')" :disabled="$this->acrissCodes->isEmpty()" data-test="price-acriss">
                 <flux:select.option value="">
                     {{ $this->acrissCodes->isEmpty() ? __('Sin códigos ACRISS') : __('Selecciona ACRISS') }}
                 </flux:select.option>
                 @foreach ($this->acrissCodes as $acrissCodeOption)
-                    <flux:select.option :value="$acrissCodeOption" wire:key="price-acriss-{{ $vehicleCategoryId }}-{{ $acrissCodeOption }}">
+                    <flux:select.option :value="$acrissCodeOption"
+                        wire:key="price-acriss-{{ $vehicleCategoryId }}-{{ $acrissCodeOption }}">
                         {{ $acrissCodeOption }}
                     </flux:select.option>
                 @endforeach
             </flux:select>
-            <flux:input wire:model="ratePlanCode" :label="__('Plan')" placeholder="STD" maxlength="30" data-test="price-plan" />
+            <flux:input wire:model="ratePlanCode" :label="__('Plan')" placeholder="STD" maxlength="30"
+                data-test="price-plan" />
             <flux:select wire:model="currencyId" :label="__('Moneda')" data-test="price-currency">
                 <flux:select.option value="">{{ __('Selecciona moneda') }}</flux:select.option>
                 @foreach ($this->currencies as $currency)
@@ -409,11 +425,14 @@ new #[Title('Precios')] class extends Component {
                     </flux:select.option>
                 @endforeach
             </flux:select>
-            <flux:input wire:model="basePrice" :label="__('Precio base')" type="number" step="0.01" min="0.01" data-test="price-base" />
+            <flux:input wire:model="basePrice" :label="__('Precio base')" type="number" step="0.01" min="0.01"
+                data-test="price-base" />
             <flux:input wire:model="validFrom" :label="__('Vigente desde')" type="date" data-test="price-valid-from" />
             <flux:input wire:model="validTo" :label="__('Vigente hasta')" type="date" data-test="price-valid-to" />
-            <flux:input wire:model="minDays" :label="__('Mín. días')" type="number" min="1" data-test="price-min-days" />
-            <flux:input wire:model="maxDays" :label="__('Máx. días')" type="number" min="1" data-test="price-max-days" />
+            <flux:input wire:model="minDays" :label="__('Mín. días')" type="number" min="1"
+                data-test="price-min-days" />
+            <flux:input wire:model="maxDays" :label="__('Máx. días')" type="number" min="1"
+                data-test="price-max-days" />
         </div>
 
         <div class="mt-4 flex justify-end">
@@ -423,7 +442,8 @@ new #[Title('Precios')] class extends Component {
         </div>
     </form>
 
-    <div class="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
+    <div
+        class="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
         <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
                 <flux:heading>{{ __('Vehículos y tarifas') }}</flux:heading>
@@ -431,7 +451,8 @@ new #[Title('Precios')] class extends Component {
             </div>
 
             <div class="grid gap-3 md:grid-cols-[16rem_10rem]">
-                <flux:input wire:model.live.debounce.300ms="search" :label="__('Buscar')" placeholder="SUV, IFAR, CUN" data-test="price-search" />
+                <flux:input wire:model.live.debounce.300ms="search" :label="__('Buscar')" placeholder="SUV, IFAR, CUN"
+                    data-test="price-search" />
                 <flux:select wire:model.live="status" :label="__('Estado')" data-test="price-status">
                     <flux:select.option value="active">{{ __('Activo') }}</flux:select.option>
                     <flux:select.option value="inactive">{{ __('Inactivo') }}</flux:select.option>
@@ -459,7 +480,8 @@ new #[Title('Precios')] class extends Component {
                         <flux:table.cell>{{ $rate->office_code }}</flux:table.cell>
                         <flux:table.cell>{{ $rate->rate_plan_code }}</flux:table.cell>
                         <flux:table.cell>{{ $rate->supplier?->code ?? '-' }}</flux:table.cell>
-                        <flux:table.cell>{{ $rate->valid_from->format('Y-m-d') }} / {{ $rate->valid_to->format('Y-m-d') }}</flux:table.cell>
+                        <flux:table.cell>{{ $rate->valid_from->format('Y-m-d') }} / {{ $rate->valid_to->format('Y-m-d') }}
+                        </flux:table.cell>
                         <flux:table.cell align="end">
                             {{ $rate->currency?->symbol ?? $rate->currency?->code }}
                             {{ number_format((float) $rate->base_price, $rate->currency?->decimal_places ?? 2) }}

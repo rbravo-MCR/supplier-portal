@@ -311,3 +311,33 @@ test('pricing page renders vehicle category catalog names without lazy loading',
         ->test('pages::pricing')
         ->assertSee('SUV compacto automatico');
 });
+
+test('pricing page rebuilds invalid cached acriss codes', function () {
+    $supplier = Supplier::factory()->create();
+    $user = User::factory()->create([
+        'role' => 'supplier_admin',
+        'supplier_id' => $supplier->id,
+    ]);
+    $catalog = VehicleCategoryCatalog::factory()->create([
+        'code' => 'SUV',
+        'name_es' => 'SUV compacto automatico',
+    ]);
+    VehicleCategoryAcrissCode::factory()->create([
+        'vehicle_category_catalog_id' => $catalog->id,
+        'code' => 'IFAR',
+    ]);
+    $vehicleCategory = VehicleCategory::factory()->create([
+        'supplier_id' => $supplier->id,
+        'vehicle_category_catalog_id' => $catalog->id,
+        'name' => $catalog->name_es,
+        'code' => $catalog->code,
+        'status' => 'active',
+    ]);
+
+    Cache::put("acriss_codes.{$vehicleCategory->id}", unserialize('O:18:"MissingCachedValue":0:{}'));
+
+    Livewire::actingAs($user)
+        ->test('pages::pricing')
+        ->set('vehicleCategoryId', $vehicleCategory->id)
+        ->assertSee('IFAR');
+});
