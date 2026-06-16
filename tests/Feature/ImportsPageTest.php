@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Office;
 use App\Models\RateImport;
 use App\Models\Supplier;
 use App\Models\User;
@@ -63,6 +64,89 @@ test('admin can activate template download by selecting a supplier', function ()
         ->set('supplierId', $supplier->id)
         ->assertSee('Descargar plantilla Excel')
         ->assertSee(route('portal.imports.template', $supplier->id));
+});
+
+test('admin sees active supplier offices with checkboxes after selecting a supplier', function () {
+    $supplier = Supplier::factory()->create(['code' => 'DEMO']);
+    $otherSupplier = Supplier::factory()->create();
+    $office = Office::factory()->create([
+        'supplier_id' => $supplier->id,
+        'name' => 'Cancun Airport',
+        'code' => 'CUN01',
+        'iata_code' => 'CUN',
+        'status' => 'active',
+    ]);
+    Office::factory()->create([
+        'supplier_id' => $supplier->id,
+        'name' => 'Inactive Office',
+        'status' => 'inactive',
+    ]);
+    Office::factory()->create([
+        'supplier_id' => $otherSupplier->id,
+        'name' => 'Other Supplier Office',
+        'status' => 'active',
+    ]);
+    $user = User::factory()->create([
+        'role' => 'admin',
+        'supplier_id' => null,
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::imports')
+        ->set('supplierId', $supplier->id)
+        ->assertSee('Oficinas registradas')
+        ->assertSee('Cancun Airport')
+        ->assertSee('CUN01 · CUN')
+        ->assertDontSee('Inactive Office')
+        ->assertDontSee('Other Supplier Office')
+        ->set('selectedOfficeIds', [$office->id])
+        ->assertSet('selectedOfficeIds', [$office->id])
+        ->assertSee('1 oficinas seleccionadas.');
+});
+
+test('imports page shows an empty offices state when selected supplier has no active offices', function () {
+    $supplier = Supplier::factory()->create(['code' => 'EMPTY']);
+    $user = User::factory()->create([
+        'role' => 'admin',
+        'supplier_id' => null,
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::imports')
+        ->set('supplierId', $supplier->id)
+        ->assertSee('Este proveedor no tiene oficinas activas registradas.');
+});
+
+test('supplier user sees their active offices on imports page', function () {
+    $supplier = Supplier::factory()->create(['code' => 'DEMO']);
+    $otherSupplier = Supplier::factory()->create(['code' => 'OTHER']);
+    Office::factory()->create([
+        'supplier_id' => $supplier->id,
+        'name' => 'Downtown Office',
+        'code' => 'DTO01',
+        'status' => 'active',
+    ]);
+    Office::factory()->create([
+        'supplier_id' => $otherSupplier->id,
+        'name' => 'Other Supplier Office',
+        'code' => 'OTH01',
+        'status' => 'active',
+    ]);
+    $user = User::factory()->create([
+        'role' => 'supplier_admin',
+        'supplier_id' => $supplier->id,
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::imports')
+        ->assertDontSee('Selecciona proveedor')
+        ->assertSee('Proveedor')
+        ->assertSee('DEMO')
+        ->assertSee('Oficinas registradas')
+        ->assertSee('Downtown Office')
+        ->assertSee('DTO01')
+        ->assertDontSee('Other Supplier Office')
+        ->assertDontSee('OTH01');
 });
 
 test('supplier rate template can be downloaded', function () {

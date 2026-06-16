@@ -193,5 +193,7 @@ test('searchable catalog selects debounce live searches for half a second', func
 
     expect($component)
         ->toContain('wire:model.live.debounce.500ms')
+        ->toContain('$wire.set(\'{{ $property }}\', {{ $option[\'value\'] }}, false)')
+        ->toContain('@if($live)')
         ->not->toContain('wire:model.live="{{ $searchProperty }}"');
 });

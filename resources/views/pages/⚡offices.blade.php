@@ -590,6 +590,7 @@ new #[Title('Oficinas')] class extends Component {
                 :placeholder="__('Filtrar país')"
                 search-placeholder="México, MX"
                 :empty="__('Sin países')"
+                :live="true"
                 data-test="office-country"
             />
 
@@ -603,6 +604,7 @@ new #[Title('Oficinas')] class extends Component {
                 :placeholder="__('Filtrar ciudad')"
                 search-placeholder="Cancun, CUN"
                 :empty="__('Sin ciudades')"
+                :live="true"
                 data-test="office-city"
             />
 
@@ -689,6 +691,7 @@ new #[Title('Oficinas')] class extends Component {
                     :placeholder="__('Todos')"
                     search-placeholder="México, MX"
                     :empty="__('Sin países')"
+                    :live="true"
                     data-test="office-filter-country"
                 />
 
@@ -702,6 +705,7 @@ new #[Title('Oficinas')] class extends Component {
                     :placeholder="__('Todas')"
                     search-placeholder="Cancun, CUN"
                     :empty="__('Sin ciudades')"
+                    :live="true"
                     data-test="office-filter-city"
                 />
 
@@ -715,6 +719,7 @@ new #[Title('Oficinas')] class extends Component {
                     :placeholder="__('Todas')"
                     search-placeholder="Hotel, 10"
                     :empty="__('Sin zonas')"
+                    :live="true"
                     data-test="office-filter-zone"
                 />
 

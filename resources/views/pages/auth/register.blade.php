@@ -17,10 +17,16 @@
                 <flux:select.option value="">{{ __('Selecciona proveedor') }}</flux:select.option>
                 @foreach ($suppliers as $supplier)
                     <flux:select.option :value="$supplier->id" :selected="(string) old('supplier_id') === (string) $supplier->id">
-                        {{ \Illuminate\Support\Str::upper($supplier->name) }}
+                        {{ \Illuminate\Support\Str::upper($supplier->name) }} · {{ $supplier->code }}
                     </flux:select.option>
                 @endforeach
             </flux:select>
+
+            @if ($suppliers->isEmpty())
+                <flux:text class="-mt-4 text-sm text-amber-700 dark:text-amber-400" data-test="register-suppliers-empty">
+                    {{ __('No hay proveedores activos disponibles para registro.') }}
+                </flux:text>
+            @endif
 
             <!-- Name -->
             <flux:input
@@ -52,7 +58,6 @@
                 :label="__('Email address')"
                 :value="old('email')"
                 type="email"
-                required
                 autocomplete="email"
                 placeholder="email@example.com"
                 input:class="text-zinc-950! placeholder:text-zinc-600!"

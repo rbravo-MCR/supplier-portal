@@ -10,7 +10,7 @@ new #[Title('Profile settings')] class extends Component {
     use ProfileValidationRules;
 
     public string $name = '';
-    public string $email = '';
+    public ?string $email = null;
 
     /**
      * Mount the component.
@@ -30,7 +30,10 @@ new #[Title('Profile settings')] class extends Component {
 
         $validated = $this->validate($this->profileRules($user->id));
 
-        $user->fill($validated);
+        $user->fill([
+            ...$validated,
+            'email' => filled($validated['email'] ?? null) ? $validated['email'] : null,
+        ]);
 
         $user->save();
 
@@ -48,7 +51,7 @@ new #[Title('Profile settings')] class extends Component {
             <flux:input wire:model="name" :label="__('Name')" type="text" required autofocus autocomplete="name" />
 
             <div>
-                <flux:input wire:model="email" :label="__('Email')" type="email" required autocomplete="email" />
+                <flux:input wire:model="email" :label="__('Email')" type="email" autocomplete="email" />
             </div>
 
             <div class="flex items-center gap-4">

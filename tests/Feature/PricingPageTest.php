@@ -288,3 +288,26 @@ test('pricing page reads active suppliers from cached array rows', function () {
         ->test('pages::pricing')
         ->assertSee('Cached Supplier');
 });
+
+test('pricing page renders vehicle category catalog names without lazy loading', function () {
+    $supplier = Supplier::factory()->create();
+    $user = User::factory()->create([
+        'role' => 'supplier_admin',
+        'supplier_id' => $supplier->id,
+    ]);
+    $catalog = VehicleCategoryCatalog::factory()->create([
+        'code' => 'SUV',
+        'name_es' => 'SUV compacto automatico',
+    ]);
+    VehicleCategory::factory()->create([
+        'supplier_id' => $supplier->id,
+        'vehicle_category_catalog_id' => $catalog->id,
+        'name' => 'Fallback name',
+        'code' => 'FB',
+        'status' => 'active',
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::pricing')
+        ->assertSee('SUV compacto automatico');
+});

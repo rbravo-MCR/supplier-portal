@@ -9,6 +9,7 @@ use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -24,7 +25,7 @@ new #[Title('Usuarios')] class extends Component {
 
     public string $username = '';
 
-    public string $email = '';
+    public ?string $email = null;
 
     public string $password = '';
 
@@ -50,7 +51,7 @@ new #[Title('Usuarios')] class extends Component {
             'supplierId' => ['nullable', 'integer', Rule::exists('suppliers', 'id')],
             'name' => ['required', 'string', 'max:255'],
             'username' => ['required', 'string', 'lowercase', 'alpha_dash:ascii', 'max:255', Rule::unique('users', 'username')],
-            'email' => ['required', 'string', 'lowercase', 'email', 'max:255', Rule::unique('users', 'email')],
+            'email' => ['nullable', 'string', 'lowercase', 'email', 'max:255', Rule::unique('users', 'email')],
             'password' => ['required', 'string', 'min:8', 'max:255'],
             'role' => ['required', Rule::in($this->allowedRoleCodes()), Rule::exists('roles', 'code')->where('status', 'active')],
             'status' => ['required', Rule::in(['active', 'inactive'])],
@@ -67,10 +68,9 @@ new #[Title('Usuarios')] class extends Component {
             'supplier_id' => $supplierId,
             'name' => $validated['name'],
             'username' => str($validated['username'])->lower()->toString(),
-            'email' => str($validated['email'])->lower()->toString(),
+            'email' => filled($validated['email'] ?? null) ? str($validated['email'])->lower()->toString() : null,
             'password' => $validated['password'],
             'role_id' => $role->id,
-            'role' => $role->code,
             'status' => $validated['status'],
         ]);
 
@@ -115,11 +115,64 @@ new #[Title('Usuarios')] class extends Component {
     /**
      * @return list<string>
      */
+    #[Computed]
+    public function usernameSuggestions(): array
+    {
+        if ($this->username !== '' && ! User::query()->where('username', $this->username)->exists()) {
+            return [];
+        }
+
+        $base = $this->username !== '' ? $this->username : $this->usernameBase();
+
+        if ($base === '') {
+            return [];
+        }
+
+        return collect([
+            "{$base}.".now()->format('y'),
+            "{$base}-01",
+            Str::limit($base, 12, '').'-'.now()->format('md'),
+            "{$base}-".Str::lower(Str::random(3)),
+        ])
+            ->map(fn (string $username): string => Str::of($username)
+                ->lower()
+                ->replaceMatches('/[^a-z0-9._-]+/', '-')
+                ->trim('-._')
+                ->limit(255, '')
+                ->value())
+            ->filter(fn (string $username): bool => $username !== '')
+            ->unique()
+            ->reject(fn (string $username): bool => User::query()->where('username', $username)->exists())
+            ->take(3)
+            ->values()
+            ->all();
+    }
+
+    public function useUsernameSuggestion(string $username): void
+    {
+        $this->username = $username;
+    }
+
+    /**
+     * @return list<string>
+     */
     private function allowedRoleCodes(): array
     {
         return Auth::user()->supplier_id
             ? ['supplier_admin', 'supplier_reservations', 'supplier_pricing']
             : ['admin', 'supplier_admin', 'supplier_reservations', 'supplier_pricing'];
+    }
+
+    private function usernameBase(): string
+    {
+        $source = $this->email ?: $this->name;
+
+        return Str::of($source)
+            ->before('@')
+            ->lower()
+            ->replaceMatches('/[^a-z0-9._-]+/', '-')
+            ->trim('-._')
+            ->value();
     }
 
     #[Computed]
@@ -148,8 +201,20 @@ new #[Title('Usuarios')] class extends Component {
     <form wire:submit="save" class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
         <div class="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <flux:input wire:model="name" :label="__('Nombre')" placeholder="María López" data-test="user-name" />
-            <flux:input wire:model="username" :label="__('Usuario')" placeholder="usuario" data-test="user-username" />
-            <flux:input wire:model="email" :label="__('Correo')" type="email" placeholder="maria@proveedor.com" data-test="user-email" />
+            <div class="flex flex-col gap-2">
+                <flux:input wire:model.live.debounce.300ms="username" :label="__('Usuario')" placeholder="usuario" data-test="user-username" />
+
+                @if ($this->usernameSuggestions !== [])
+                    <div class="flex flex-wrap gap-2">
+                        @foreach ($this->usernameSuggestions as $suggestion)
+                            <flux:button type="button" size="xs" variant="outline" icon="user" wire:click="useUsernameSuggestion('{{ $suggestion }}')" data-test="username-suggestion">
+                                {{ $suggestion }}
+                            </flux:button>
+                        @endforeach
+                    </div>
+                @endif
+            </div>
+            <flux:input wire:model.live.debounce.300ms="email" :label="__('Correo')" type="email" placeholder="maria@proveedor.com" data-test="user-email" />
             <flux:input wire:model="password" :label="__('Contraseña temporal')" type="password" data-test="user-password" />
 
             @if (! Auth::user()->supplier_id)

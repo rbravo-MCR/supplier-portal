@@ -6,37 +6,31 @@ use App\Models\User;
 use Livewire\Livewire;
 
 test('guests are redirected to the login page', function () {
-    $user = User::factory()->create();
-    $team = $user->currentTeam;
-
-    $response = $this->get(route('dashboard'));
+    $response = $this->get(route('portal.imports'));
     $response->assertRedirect(route('login'));
 });
 
-test('authenticated users can visit the dashboard', function () {
+test('authenticated users can visit the admin dashboard', function () {
     $user = User::factory()->create();
-    $team = $user->currentTeam;
 
     $response = $this
         ->actingAs($user)
-        ->get(route('dashboard'));
+        ->get(route('admin.dashboard'));
 
     $response
         ->assertOk()
         ->assertSee('Trabajando, leyendo datos...');
 });
 
-test('supplier users without a current team can visit the supplier dashboard', function () {
+test('supplier users can visit the supplier dashboard', function () {
     $supplier = Supplier::factory()->create();
     $user = User::factory()->create([
         'role' => 'supplier_admin',
         'supplier_id' => $supplier->id,
     ]);
 
-    $user->update(['current_team_id' => null]);
-
     $response = $this
-        ->actingAs($user->fresh())
+        ->actingAs($user)
         ->get(route('supplier.dashboard'));
 
     $response

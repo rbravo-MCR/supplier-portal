@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Role;
 use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
@@ -51,11 +52,36 @@ test('users form creates a portal user', function () {
         'name' => 'Carlos Pérez',
         'username' => 'cperez',
         'email' => 'carlos@example.test',
-        'role' => 'supplier_pricing',
+        'role_id' => $roleId = Role::where('code', 'supplier_pricing')->value('id'),
         'status' => 'active',
     ]);
 
-    expect(User::where('username', 'cperez')->first()->portalRole->code)->toBe('supplier_pricing');
+    expect($roleId)->not->toBeNull()
+        ->and(User::where('username', 'cperez')->first()->portalRole->code)->toBe('supplier_pricing');
+});
+
+test('users form can create a portal user without email', function () {
+    $supplier = Supplier::factory()->create();
+    $admin = User::factory()->create();
+
+    Livewire::actingAs($admin)
+        ->test('pages::users')
+        ->set('supplierId', $supplier->id)
+        ->set('name', 'Roberto Bravo')
+        ->set('username', 'rbravo')
+        ->set('email', '')
+        ->set('password', 'temporary-password')
+        ->set('role', 'supplier_reservations')
+        ->call('save')
+        ->assertHasNoErrors();
+
+    $this->assertDatabaseHas('users', [
+        'supplier_id' => $supplier->id,
+        'name' => 'Roberto Bravo',
+        'username' => 'rbravo',
+        'email' => null,
+        'status' => 'active',
+    ]);
 });
 
 test('users form requires globally unique usernames', function () {
@@ -77,6 +103,20 @@ test('users form requires globally unique usernames', function () {
         ->set('role', 'supplier_pricing')
         ->call('save')
         ->assertHasErrors(['username']);
+});
+
+test('users form suggests three available usernames', function () {
+    $admin = User::factory()->create();
+
+    User::factory()->create(['username' => 'rbravo']);
+
+    Livewire::actingAs($admin)
+        ->test('pages::users')
+        ->set('name', 'Roberto Bravo')
+        ->set('username', 'rbravo')
+        ->assertSee('rbravo.26')
+        ->assertSee('rbravo-01')
+        ->assertSee('rbravo-0615');
 });
 
 test('users page reads active suppliers from cached array rows', function () {

@@ -64,7 +64,6 @@ test('authenticated supplier users visiting login are redirected to the supplier
     $user = User::factory()->create([
         'role' => 'supplier_admin',
         'supplier_id' => $supplier->id,
-        'current_team_id' => null,
     ]);
 
     $this->actingAs($user)

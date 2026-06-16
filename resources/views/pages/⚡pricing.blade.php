@@ -202,12 +202,14 @@ new #[Title('Precios')] class extends Component {
             return collect();
         }
 
-        return Office::query()
-            ->select(['id', 'supplier_id', 'name', 'code', 'iata_code', 'status'])
-            ->where('supplier_id', $supplierId)
-            ->where('status', 'active')
-            ->orderBy('name')
-            ->get();
+        return $this->rememberModels("offices.active.{$supplierId}", Office::class, function () use ($supplierId) {
+            return Office::query()
+                ->select(['id', 'supplier_id', 'name', 'code', 'iata_code', 'status'])
+                ->where('supplier_id', $supplierId)
+                ->where('status', 'active')
+                ->orderBy('name')
+                ->get();
+        });
     }
 
     /**
@@ -238,13 +240,20 @@ new #[Title('Precios')] class extends Component {
     public function acrissCodes(): Collection
     {
         $supplierId = Auth::user()->supplier_id ?: $this->supplierId;
-        $vehicleCategory = $this->selectedVehicleCategory($supplierId);
 
-        if (! $vehicleCategory) {
+        if (! $supplierId || ! $this->vehicleCategoryId) {
             return collect();
         }
 
-        return collect($this->allowedAcrissCodes($vehicleCategory))->sort()->values();
+        return Cache::remember("acriss_codes.{$this->vehicleCategoryId}", 3600, function () use ($supplierId) {
+            $vehicleCategory = $this->selectedVehicleCategory($supplierId);
+
+            if (! $vehicleCategory) {
+                return collect();
+            }
+
+            return collect($this->allowedAcrissCodes($vehicleCategory))->sort()->values();
+        });
     }
 
     /**

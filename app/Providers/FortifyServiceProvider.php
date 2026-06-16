@@ -79,7 +79,8 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::confirmPasswordView(fn () => view('pages::auth.confirm-password'));
         Fortify::registerView(fn () => view('pages::auth.register', [
             'suppliers' => Supplier::query()
-                ->select(['id', 'name'])
+                ->select(['id', 'name', 'code'])
+                ->active()
                 ->orderBy('name')
                 ->get(),
         ]));

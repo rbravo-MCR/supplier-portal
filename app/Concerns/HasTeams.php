@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 
 trait HasTeams
@@ -85,7 +86,10 @@ trait HasTeams
             return false;
         }
 
-        $this->update(['current_team_id' => $team->id]);
+        if (Schema::hasColumn($this->getTable(), 'current_team_id')) {
+            $this->forceFill(['current_team_id' => $team->id])->save();
+        }
+
         $this->setRelation('currentTeam', $team);
 
         URL::defaults(['current_team' => $team->slug]);
@@ -122,6 +126,13 @@ trait HasTeams
      */
     public function teamRole(Team $team): ?TeamRole
     {
+        if ($this->relationLoaded('teamMemberships')) {
+            return $this->teamMemberships
+                ->where('team_id', $team->id)
+                ->first()
+                ?->role;
+        }
+
         return $this->teamMemberships()
             ->where('team_id', $team->id)
             ->first()
@@ -135,6 +146,8 @@ trait HasTeams
      */
     public function toUserTeams(bool $includeCurrent = false): Collection
     {
+        $this->loadMissing('teamMemberships');
+
         return $this->teams()
             ->get()
             ->map(fn (Team $team) => ! $includeCurrent && $this->isCurrentTeam($team) ? null : $this->toUserTeam($team))

@@ -27,6 +27,20 @@ test('profile information can be updated', function () {
     expect($user->email)->toEqual('test@example.com');
 });
 
+test('profile email can be cleared', function () {
+    $user = User::factory()->create(['email' => 'old@example.com']);
+
+    $this->actingAs($user);
+
+    Livewire::test('pages::settings.profile')
+        ->set('name', 'Test User')
+        ->set('email', '')
+        ->call('updateProfileInformation')
+        ->assertHasNoErrors();
+
+    expect($user->refresh()->email)->toBeNull();
+});
+
 test('user can delete their account', function () {
     $user = User::factory()->create();
 

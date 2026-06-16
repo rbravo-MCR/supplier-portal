@@ -6,6 +6,16 @@
                 "artisan",
                 "boost:mcp"
             ]
+        },
+        "context7": {
+            "command": "npx",
+            "args": [
+                "-y",
+                "@upstash/context7-mcp"
+            ],
+            "env": {
+                "CONTEXT7_API_KEY": "ctx7sk-d7aa5828-7078-4e1c-a1ab-799d9b02f2b6"
+            }
         }
     }
 }

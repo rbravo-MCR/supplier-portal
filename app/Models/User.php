@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Actions\Teams\CreateTeam;
 use App\Concerns\HasTeams;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -27,6 +29,16 @@ class User extends Authenticatable
     protected $rememberTokenName = '';
 
     /**
+     * @var array<int, string>
+     */
+    private static array $roleCodeById = [];
+
+    /**
+     * @var array<string, int>
+     */
+    private static array $roleIdByCode = [];
+
+    /**
      * Bootstrap the model and its traits.
      */
     protected static function boot(): void
@@ -39,7 +51,7 @@ class User extends Authenticatable
             }
 
             if (empty($user->username)) {
-                $user->username = Str::of((string) Str::before($user->email, '@'))
+                $user->username = Str::of((string) Str::before($user->email ?: $user->name, '@'))
                     ->lower()
                     ->replaceMatches('/[^a-z0-9._-]+/', '-')
                     ->trim('-._')
@@ -51,6 +63,14 @@ class User extends Authenticatable
             if ($user->username !== null) {
                 $user->username = Str::lower($user->username);
             }
+        });
+
+        static::created(function (User $user): void {
+            if ($user->personalTeam() !== null) {
+                return;
+            }
+
+            app(CreateTeam::class)->handle($user, "{$user->name}'s Team", true);
         });
 
         static::saved(function (User $user): void {
@@ -80,6 +100,21 @@ class User extends Authenticatable
     public function portalRole(): BelongsTo
     {
         return $this->belongsTo(Role::class, 'role_id');
+    }
+
+    /**
+     * Preserve the public role API while the database stores roles by role_id.
+     *
+     * @return Attribute<string|null, string|null>
+     */
+    protected function role(): Attribute
+    {
+        return Attribute::make(
+            get: fn (mixed $value, array $attributes): ?string => $this->roleCodeFromAttributes($attributes),
+            set: fn (?string $value): array => [
+                'role_id' => $value === null ? null : self::roleIdForCode($value),
+            ],
+        );
     }
 
     /**
@@ -148,7 +183,51 @@ class User extends Authenticatable
             $query->where('name', $op, "%{$term}%")
                 ->orWhere('username', $op, "%{$term}%")
                 ->orWhere('email', $op, "%{$term}%")
-                ->orWhere('role', $op, "%{$term}%");
+                ->orWhereHas('portalRole', fn (Builder $query): Builder => $query->where('code', $op, "%{$term}%"));
         });
+    }
+
+    /**
+     * Resolve the role code from loaded relations or the role_id attribute.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    private function roleCodeFromAttributes(array $attributes): ?string
+    {
+        if ($this->relationLoaded('portalRole')) {
+            return $this->portalRole?->code;
+        }
+
+        $roleId = $attributes['role_id'] ?? null;
+
+        if ($roleId === null) {
+            return null;
+        }
+
+        return self::roleCodeForId((int) $roleId);
+    }
+
+    private static function roleCodeForId(int $roleId): ?string
+    {
+        if (! array_key_exists($roleId, self::$roleCodeById)) {
+            self::$roleCodeById[$roleId] = (string) Role::query()
+                ->whereKey($roleId)
+                ->value('code');
+        }
+
+        return self::$roleCodeById[$roleId] ?: null;
+    }
+
+    private static function roleIdForCode(string $roleCode): ?int
+    {
+        if (! array_key_exists($roleCode, self::$roleIdByCode)) {
+            $roleId = Role::query()
+                ->where('code', $roleCode)
+                ->value('id');
+
+            self::$roleIdByCode[$roleCode] = $roleId === null ? 0 : (int) $roleId;
+        }
+
+        return self::$roleIdByCode[$roleCode] ?: null;
     }
 }

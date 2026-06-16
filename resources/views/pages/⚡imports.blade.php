@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\RateImport;
+use App\Models\Office;
 use App\Models\Supplier;
 use App\Modules\Import\Application\DTOs\CreateRateImportData;
 use App\Modules\Import\Application\UseCases\CreateRateImport;
@@ -23,6 +24,11 @@ new #[Title('Importaciones')] class extends Component {
     public ?int $supplierId = null;
 
     public ?TemporaryUploadedFile $file = null;
+
+    /**
+     * @var list<int|string>
+     */
+    public array $selectedOfficeIds = [];
 
     public bool $formatIsValid = false;
 
@@ -83,6 +89,12 @@ new #[Title('Importaciones')] class extends Component {
         $this->validationMessage = __('Formato validado.');
     }
 
+    public function updatedSupplierId(): void
+    {
+        $this->selectedOfficeIds = [];
+        $this->resetValidationState();
+    }
+
     public function upload(CreateRateImport $createRateImport): void
     {
         if (! $this->formatIsValid || $this->file === null || $this->parsedRows === []) {
@@ -134,9 +146,36 @@ new #[Title('Importaciones')] class extends Component {
     #[Computed]
     public function suppliers(): Collection
     {
+        if (Auth::user()->supplier_id) {
+            return Supplier::query()
+                ->select(['id', 'name', 'code'])
+                ->whereKey(Auth::user()->supplier_id)
+                ->get();
+        }
+
         return Supplier::query()
             ->select(['id', 'name', 'code'])
             ->active()
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * @return Collection<int, Office>
+     */
+    #[Computed]
+    public function offices(): Collection
+    {
+        $supplierId = Auth::user()->supplier_id ?: $this->supplierId;
+
+        if (! $supplierId) {
+            return collect();
+        }
+
+        return Office::query()
+            ->select(['id', 'supplier_id', 'name', 'code', 'iata_code'])
+            ->where('supplier_id', $supplierId)
+            ->where('status', 'active')
             ->orderBy('name')
             ->get();
     }
@@ -188,6 +227,56 @@ new #[Title('Importaciones')] class extends Component {
                             <flux:select.option :value="$supplier->id">{{ $supplier->name }} · {{ $supplier->code }}</flux:select.option>
                         @endforeach
                     </flux:select>
+                @else
+                    <div class="rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800" data-test="import-current-supplier">
+                        <flux:heading size="sm">{{ __('Proveedor') }}</flux:heading>
+                        <flux:text>
+                            {{ Auth::user()->supplier?->name }} · {{ Auth::user()->supplier?->code }}
+                        </flux:text>
+                    </div>
+                @endif
+
+                @if ($supplierId)
+                    <div
+                        class="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800"
+                        data-test="import-offices"
+                    >
+                        <div>
+                            <flux:heading size="sm">{{ __('Oficinas registradas') }}</flux:heading>
+                            <flux:text class="text-sm">
+                                {{ __('Selecciona las oficinas del proveedor que aplican para esta importación.') }}
+                            </flux:text>
+                        </div>
+
+                        @if ($this->offices->isEmpty())
+                            <flux:text class="text-sm text-zinc-500 dark:text-zinc-400" data-test="import-offices-empty">
+                                {{ __('Este proveedor no tiene oficinas activas registradas.') }}
+                            </flux:text>
+                        @else
+                            <flux:checkbox.group wire:model="selectedOfficeIds" data-test="import-office-checkboxes">
+                                <div class="grid gap-2 md:grid-cols-2">
+                                    @foreach ($this->offices as $office)
+                                        <label
+                                            class="flex min-h-12 cursor-pointer items-start gap-3 rounded-md border border-zinc-200 bg-white p-3 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                                            wire:key="import-office-{{ $office->id }}"
+                                        >
+                                            <flux:checkbox :value="$office->id" />
+                                            <span class="min-w-0">
+                                                <span class="block truncate font-medium">{{ $office->name }}</span>
+                                                <span class="block text-xs text-zinc-500 dark:text-zinc-400">
+                                                    {{ $office->code }}{{ $office->iata_code ? ' · '.$office->iata_code : '' }}
+                                                </span>
+                                            </span>
+                                        </label>
+                                    @endforeach
+                                </div>
+                            </flux:checkbox.group>
+
+                            <flux:text class="text-sm text-zinc-500 dark:text-zinc-400" data-test="import-offices-selected-count">
+                                {{ __(':count oficinas seleccionadas.', ['count' => count($selectedOfficeIds)]) }}
+                            </flux:text>
+                        @endif
+                    </div>
                 @endif
 
                 <div class="flex flex-col gap-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 dark:border-zinc-700 dark:bg-zinc-800">

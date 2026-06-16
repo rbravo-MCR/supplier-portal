@@ -16,10 +16,16 @@ class SetTeamUrlDefaults
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if ($currentTeam = $request->user()?->currentTeam) {
+        $user = $request->user();
+
+        if ($user) {
+            $user->loadMissing('portalRole:id,name,code', 'currentTeam:id,name,slug');
+        }
+
+        if ($user?->currentTeam) {
             URL::defaults([
-                'current_team' => $currentTeam->slug,
-                'team' => $currentTeam->slug,
+                'current_team' => $user->currentTeam->slug,
+                'team' => $user->currentTeam->slug,
             ]);
         }
 

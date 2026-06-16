@@ -34,7 +34,13 @@ class SupplierContext
      */
     public function id(): int
     {
-        return $this->current()->id;
+        $user = Auth::user();
+
+        if (! $user instanceof User || $user->supplier_id === null) {
+            throw SupplierContextUnavailable::forCurrentUser();
+        }
+
+        return $user->supplier_id;
     }
 
     /**
