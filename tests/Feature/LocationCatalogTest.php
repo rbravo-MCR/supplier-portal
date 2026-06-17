@@ -67,8 +67,6 @@ test('location catalog search ignores accents', function () {
 });
 
 test('vehicle availability can resolve a supplier office by iata', function () {
-    config(['services.supplier_service.token' => 'test-token']);
-
     $supplier = Supplier::factory()->create(['code' => 'DEMO']);
     $office = Office::factory()
         ->for(Zone::factory()->for(City::factory()->for(Country::factory())))
@@ -90,8 +88,6 @@ test('vehicle availability can resolve a supplier office by iata', function () {
                 'valid_to' => '2026-06-14',
             ],
         ],
-    ], [
-        'Authorization' => 'Bearer test-token',
     ])
         ->assertOk()
         ->assertJsonPath('data.0.office.code', 'CUN01')

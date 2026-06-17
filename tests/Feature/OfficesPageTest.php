@@ -159,7 +159,52 @@ test('offices form selects mexico by default', function () {
     Livewire::actingAs($user)
         ->test('pages::offices')
         ->assertSet('countryId', $mexico->id)
-        ->assertSee('México · MX');
+        ->assertSee('México');
+});
+
+test('offices country selectors show every active country', function () {
+    $supplier = Supplier::factory()->create();
+    $user = User::factory()->create([
+        'role' => 'supplier_admin',
+        'supplier_id' => $supplier->id,
+    ]);
+
+    Country::factory()->create(['name' => 'México', 'iso2' => 'MX']);
+
+    foreach (['AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM', 'AN', 'AO', 'AP', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AV', 'AW', 'AX', 'AY', 'AZ', 'BA', 'BB', 'BC', 'BD', 'ZZ'] as $index => $iso2) {
+        Country::factory()->create([
+            'name' => sprintf('Country %02d', $index + 1),
+            'iso2' => $iso2,
+        ]);
+    }
+
+    Livewire::actingAs($user)
+        ->test('pages::offices')
+        ->assertSee('México')
+        ->assertSee('Country 31');
+});
+
+test('offices city selector uses the exact selected country', function () {
+    $supplier = Supplier::factory()->create();
+    $user = User::factory()->create([
+        'role' => 'supplier_admin',
+        'supplier_id' => $supplier->id,
+    ]);
+    $chile = Country::factory()->create(['name' => 'Chile', 'iso2' => 'CL']);
+    $china = Country::factory()->create(['name' => 'China', 'iso2' => 'CN']);
+
+    City::factory()->for($chile)->create(['name' => 'Santiago', 'code' => 'SCL']);
+    City::factory()->for($china)->create(['name' => 'Beijing', 'code' => 'BJS']);
+
+    $component = Livewire::actingAs($user)
+        ->test('pages::offices')
+        ->set('countryId', $china->id)
+        ->assertSet('countryId', $china->id)
+        ->assertSee('Beijing · BJS');
+
+    expect($component->instance()->cityOptions->pluck('label')->all())
+        ->toContain('Beijing · BJS')
+        ->not->toContain('Santiago · SCL');
 });
 
 test('offices directory filters offices by country without changing visible results', function () {
@@ -188,12 +233,12 @@ test('offices directory filters offices by country without changing visible resu
         ->assertDontSee('Miami Airport');
 });
 
-test('searchable catalog selects debounce live searches for half a second', function () {
-    $component = file_get_contents(resource_path('views/components/portal-searchable-select.blade.php'));
+test('offices page uses native live selects for location catalogs', function () {
+    $component = file_get_contents(resource_path('views/pages/⚡offices.blade.php'));
 
     expect($component)
-        ->toContain('wire:model.live.debounce.500ms')
-        ->toContain('$wire.set(\'{{ $property }}\', {{ $option[\'value\'] }}, false)')
-        ->toContain('@if($live)')
-        ->not->toContain('wire:model.live="{{ $searchProperty }}"');
+        ->toContain('wire:model.live="countryId"')
+        ->toContain('wire:model.live="cityId"')
+        ->toContain('wire:model.live="zoneId"')
+        ->not->toContain('x-portal-searchable-select');
 });

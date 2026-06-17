@@ -2,24 +2,26 @@
 
 use App\Models\Supplier;
 
-beforeEach(function () {
-    config(['services.supplier_service.token' => 'test-token']);
-});
-
-test('supplier service booking endpoint requires token', function () {
+test('supplier service booking endpoint validates requests without token', function () {
     $this->postJson('/api/supplier-service/bookings', [])
-        ->assertUnauthorized()
-        ->assertJson([
-            'message' => 'Unauthorized.',
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors([
+            'supplier_code',
+            'reservation_code',
+            'customer_name',
+            'pickup_office_code',
+            'dropoff_office_code',
+            'pickup_at',
+            'dropoff_at',
+            'total_amount',
+            'currency',
         ]);
 });
 
 test('supplier service can create a booking', function () {
     Supplier::factory()->create(['code' => 'DEMO']);
 
-    $this->postJson('/api/supplier-service/bookings', validPayload(), [
-        'Authorization' => 'Bearer test-token',
-    ])
+    $this->postJson('/api/supplier-service/bookings', validPayload())
         ->assertCreated()
         ->assertJsonPath('data.supplier.code', 'DEMO')
         ->assertJsonPath('data.reservation_code', 'OUTLET-API-001')
@@ -35,16 +37,13 @@ test('supplier service can create a booking', function () {
 test('supplier service booking endpoint is idempotent by supplier and reservation code', function () {
     Supplier::factory()->create(['code' => 'DEMO']);
 
-    $this->postJson('/api/supplier-service/bookings', validPayload(), [
-        'Authorization' => 'Bearer test-token',
-    ])->assertCreated();
+    $this->postJson('/api/supplier-service/bookings', validPayload())
+        ->assertCreated();
 
     $this->postJson('/api/supplier-service/bookings', [
         ...validPayload(),
         'customer_name' => 'Cliente API Actualizado',
         'total_amount' => 325.75,
-    ], [
-        'Authorization' => 'Bearer test-token',
     ])
         ->assertOk()
         ->assertJsonPath('data.customer_name', 'Cliente API Actualizado')

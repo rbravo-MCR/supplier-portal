@@ -12,8 +12,9 @@ test('registration screen renders active supplier ids and uppercase names from t
     $response
         ->assertOk()
         ->assertSee('name="supplier_id"', false)
+        ->assertSee('font-medium text-zinc-950!', false)
+        ->assertSee('[&>option]:text-zinc-950', false)
         ->assertSee('text-zinc-950!', false)
-        ->assertSee('placeholder:text-zinc-600!', false)
         ->assertSee('Selecciona proveedor')
         ->assertSee('AMERICA CAR RENTAL · ACR')
         ->assertSee('value="'.$supplier->id.'"', false)

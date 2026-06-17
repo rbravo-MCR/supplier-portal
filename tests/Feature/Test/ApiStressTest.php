@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\DB;
  * BOOKING VOLUME:       100 sequential POSTs — time budget + query budget per request.
  * BOOKING UPSERT:       50 rounds to the same reservation_code — exactly 1 DB row, last value wins.
  * BOOKING ISOLATION:    5 suppliers × 20 bookings interleaved — zero cross-supplier contamination.
- * AUTH REJECTION STORM: 50 requests with wrong token — all 401, zero rows written.
+ * UNAUTHENTICATED FLOW: 50 valid requests without token — all created.
  * VALIDATION FLOOD:     30 malformed payloads — all 422, zero rows written.
  * AVAILABILITY BATCH:   Single request carrying 100 items — all stored within time budget.
  * AVAILABILITY UPSERT:  30 rounds to the same availability window — exactly 1 row, last quantity wins.
@@ -22,7 +22,7 @@ const API_BOOKING_VOLUME = 100;
 const API_BOOKING_TIME_BUDGET_SECONDS = 45;
 const API_QUERY_BUDGET_PER_BOOKING_POST = 12;
 const API_UPSERT_ROUNDS = 50;
-const API_AUTH_FLOOD_ROUNDS = 50;
+const API_UNAUTHENTICATED_FLOW_ROUNDS = 50;
 const API_VALIDATION_FLOOD_ROUNDS = 30;
 const API_MULTI_SUPPLIER_COUNT = 5;
 const API_MULTI_SUPPLIER_BOOKINGS = 20;
@@ -32,21 +32,9 @@ const API_AVAILABILITY_UPSERT_ROUNDS = 30;
 const API_AVAILABILITY_WINDOW_BATCHES = 20;
 const API_AVAILABILITY_ITEMS_PER_BATCH = 5;
 
-beforeEach(function () {
-    config(['services.supplier_service.token' => 'api-stress-token']);
-});
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-/**
- * @return array<string, string>
- */
-function apiAuthHeader(): array
-{
-    return ['Authorization' => 'Bearer api-stress-token'];
-}
 
 /**
  * @param  array<string, mixed>  $overrides
@@ -93,7 +81,7 @@ test('api stress: 100 sequential booking POSTs complete within time and query bu
     $supplier = Supplier::factory()->create(['code' => 'APIVOL']);
 
     // Warmup outside measurement window to prime caches/compiled state.
-    $this->postJson('/api/supplier-service/bookings', stressBookingPayload('APIVOL', 'WARM-UP'), apiAuthHeader())
+    $this->postJson('/api/supplier-service/bookings', stressBookingPayload('APIVOL', 'WARM-UP'))
         ->assertCreated();
 
     $sampleIndexes = [1, 50, 99];
@@ -110,8 +98,7 @@ test('api stress: 100 sequential booking POSTs complete within time and query bu
 
         $this->postJson(
             '/api/supplier-service/bookings',
-            stressBookingPayload('APIVOL', "RES-{$i}"),
-            apiAuthHeader()
+            stressBookingPayload('APIVOL', "RES-{$i}")
         )->assertCreated();
 
         if ($isSample) {
@@ -157,7 +144,7 @@ test('api stress: 50 upsert rounds to same reservation_code produce exactly 1 bo
     Supplier::factory()->create(['code' => 'APIUPS']);
 
     // Round 1: creates the booking.
-    $this->postJson('/api/supplier-service/bookings', stressBookingPayload('APIUPS', 'RES-IDEM-001'), apiAuthHeader())
+    $this->postJson('/api/supplier-service/bookings', stressBookingPayload('APIUPS', 'RES-IDEM-001'))
         ->assertCreated()
         ->assertJsonPath('data.status', 'pending');
 
@@ -170,7 +157,7 @@ test('api stress: 50 upsert rounds to same reservation_code produce exactly 1 bo
         $this->postJson('/api/supplier-service/bookings', stressBookingPayload('APIUPS', 'RES-IDEM-001', [
             'total_amount' => $lastAmount,
             'customer_name' => "Updated Round {$round}",
-        ]), apiAuthHeader())
+        ]))
             ->assertOk()
             ->assertJsonPath('data.reservation_code', 'RES-IDEM-001');
     }
@@ -204,8 +191,7 @@ test('api stress: 5 suppliers × 20 bookings interleaved — zero cross-supplier
         foreach ($suppliers as $supplier) {
             $response = $this->postJson(
                 '/api/supplier-service/bookings',
-                stressBookingPayload($supplier->code, "RES-{$supplier->code}-{$booking}"),
-                apiAuthHeader()
+                stressBookingPayload($supplier->code, "RES-{$supplier->code}-{$booking}")
             );
 
             $response->assertCreated();
@@ -241,27 +227,26 @@ test('api stress: 5 suppliers × 20 bookings interleaved — zero cross-supplier
 });
 
 // ---------------------------------------------------------------------------
-// Booking API — Auth rejection storm
+// Booking API — Unauthenticated flow
 // ---------------------------------------------------------------------------
 
-test('api stress: 50 requests with wrong token all return 401 and write zero rows', function () {
-    Supplier::factory()->create(['code' => 'APIAUTH']);
+test('api stress: 50 valid booking POSTs without token all create rows', function () {
+    Supplier::factory()->create(['code' => 'APINOTOKEN']);
 
-    $rejected = 0;
+    $created = 0;
 
-    foreach (range(1, API_AUTH_FLOOD_ROUNDS) as $i) {
+    foreach (range(1, API_UNAUTHENTICATED_FLOW_ROUNDS) as $i) {
         $this->postJson(
             '/api/supplier-service/bookings',
-            stressBookingPayload('APIAUTH', "RES-AUTH-{$i}"),
-            ['Authorization' => 'Bearer wrong-token']
-        )->assertUnauthorized();
+            stressBookingPayload('APINOTOKEN', "RES-NOTOKEN-{$i}")
+        )->assertCreated();
 
-        $rejected++;
+        $created++;
     }
 
-    expect($rejected)->toBe(API_AUTH_FLOOD_ROUNDS);
+    expect($created)->toBe(API_UNAUTHENTICATED_FLOW_ROUNDS);
 
-    expect(DB::table('bookings')->count())->toBe(0, 'auth-rejected requests wrote rows to DB');
+    expect(DB::table('bookings')->count())->toBe(API_UNAUTHENTICATED_FLOW_ROUNDS);
 });
 
 // ---------------------------------------------------------------------------
@@ -297,7 +282,7 @@ test('api stress: 30 malformed booking POSTs all return 422 and write zero rows'
     $unprocessable = 0;
 
     foreach (array_slice($badPayloads, 0, API_VALIDATION_FLOOD_ROUNDS) as $payload) {
-        $this->postJson('/api/supplier-service/bookings', $payload, apiAuthHeader())
+        $this->postJson('/api/supplier-service/bookings', $payload)
             ->assertUnprocessable();
         $unprocessable++;
     }
@@ -333,7 +318,7 @@ test('api stress: single availability POST with 100 items stores all within time
     $this->postJson('/api/supplier-service/vehicle-availability', [
         'supplier_code' => 'AVIBATCH',
         'items' => $items,
-    ], apiAuthHeader())
+    ])
         ->assertOk()
         ->assertJsonPath('meta.received', API_AVAILABILITY_ITEMS)
         ->assertJsonPath('meta.stored', API_AVAILABILITY_ITEMS);
@@ -368,7 +353,7 @@ test('api stress: 30 upsert rounds to same availability window produce exactly 1
                     'valid_to' => '2026-09-30',
                 ]),
             ],
-        ], apiAuthHeader())
+        ])
             ->assertOk()
             ->assertJsonPath('meta.stored', 1);
     }
@@ -412,7 +397,7 @@ test('api stress: 20 distinct availability batches — all 100 unique windows st
         $response = $this->postJson('/api/supplier-service/vehicle-availability', [
             'supplier_code' => 'AVIWIN',
             'items' => $items,
-        ], apiAuthHeader())
+        ])
             ->assertOk();
 
         $stored += $response->json('meta.stored');

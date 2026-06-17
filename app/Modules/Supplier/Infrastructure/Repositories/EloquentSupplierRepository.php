@@ -26,6 +26,8 @@ class EloquentSupplierRepository implements SupplierRepository
         return Supplier::query()->create([
             'name' => $data->name,
             'code' => $normalizedCode,
+            'country_id' => $data->countryId,
+            'integration_type' => $data->integrationType,
             'status' => $data->status,
             'max_users' => $data->maxUsers,
             'contact_name' => $data->contactName,

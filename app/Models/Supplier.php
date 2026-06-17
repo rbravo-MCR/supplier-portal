@@ -7,15 +7,22 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
-#[Fillable(['uuid', 'name', 'code', 'status', 'max_users', 'contact_name', 'email', 'phone'])]
+#[Fillable(['uuid', 'name', 'code', 'country_id', 'integration_type', 'status', 'max_users', 'contact_name', 'email', 'phone'])]
 class Supplier extends Model
 {
     /** @use HasFactory<SupplierFactory> */
     use HasFactory;
+
+    public const IntegrationNone = 'none';
+
+    public const IntegrationApi = 'api';
+
+    public const IntegrationSoap = 'soap';
 
     /**
      * Bootstrap the model and its traits.
@@ -47,6 +54,16 @@ class Supplier extends Model
     public function users(): HasMany
     {
         return $this->hasMany(User::class);
+    }
+
+    /**
+     * Get the country where the supplier is legally based.
+     *
+     * @return BelongsTo<Country, $this>
+     */
+    public function country(): BelongsTo
+    {
+        return $this->belongsTo(Country::class);
     }
 
     /**

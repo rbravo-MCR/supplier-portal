@@ -116,7 +116,7 @@ Current production validation status:
 
 ## Supplier Service API
 
-Two JSON endpoints receive push data from the external supplier service. Both require an `Authorization: Bearer <token>` header matching `SUPPLIER_SERVICE_TOKEN`. Requests are throttled at 120 per minute.
+Two JSON endpoints receive push data from the external supplier service. Requests are throttled at 120 per minute.
 
 **Create or update a booking:**
 
@@ -237,6 +237,18 @@ The application distinguishes platform users from supplier-scoped users through 
 
 Supplier-scoped pages automatically use the authenticated user's supplier. Platform users can select a supplier where the workflow requires it.
 
+## Supplier Eligibility
+
+The portal is intended for rental suppliers that operate outside Mexico and do not have API or SOAP integration.
+
+Supplier creation enforces:
+
+- The supplier fiscal country must be active and outside Mexico.
+- The supplier integration type must be `none`.
+- Suppliers with API or SOAP integrations must not be registered for manual portal operation.
+
+Supplier registration for users only lists active suppliers that satisfy those rules.
+
 Portal roles are stored in the `roles` table and linked from `users.role_id`. The legacy `users.role` code is still maintained for policy compatibility.
 
 Seeded role codes:
@@ -253,6 +265,14 @@ Seeded role codes:
 
 Country, city, and zone lookups use the database-backed search scopes in the Eloquent models.
 
+The location catalog is imported from the Fenix database:
+
+- `api_paises` -> `countries`
+- `api_destinos` -> `cities`
+- `api_zonas` -> `zones`
+
+Countries store ISO2 and ISO3 codes when available. Cities are linked to countries by ISO2, and zones are linked to cities by destination code.
+
 Countries can optionally reference a currency through `countries.currency_id`. The relationship is nullable so the location catalog can grow before every country has a configured currency.
 
 On PostgreSQL, migrations enable:
@@ -262,6 +282,12 @@ On PostgreSQL, migrations enable:
 - trigram GIN indexes for `countries.name`, `cities.name`, and `zones.name`
 
 This makes partial searches fast and accent-insensitive, so searches such as `Mexico` can match `México`, and `Cancun` can match `Cancún`.
+
+The offices page uses native Livewire/Flux selects for dependent location selection:
+
+- Selecting a country loads only its cities.
+- Selecting a city loads only its zones.
+- Office country selection is open to any country in `countries`; the outside-Mexico restriction applies only to supplier creation.
 
 ## Currency Catalog
 

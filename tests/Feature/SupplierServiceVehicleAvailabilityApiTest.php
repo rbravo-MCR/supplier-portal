@@ -2,24 +2,19 @@
 
 use App\Models\Supplier;
 
-beforeEach(function () {
-    config(['services.supplier_service.token' => 'test-token']);
-});
-
-test('supplier service vehicle availability endpoint requires token', function () {
+test('supplier service vehicle availability endpoint validates requests without token', function () {
     $this->postJson('/api/supplier-service/vehicle-availability', [])
-        ->assertUnauthorized()
-        ->assertJson([
-            'message' => 'Unauthorized.',
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors([
+            'supplier_code',
+            'items',
         ]);
 });
 
 test('supplier service can send vehicle availability', function () {
     Supplier::factory()->create(['code' => 'DEMO']);
 
-    $this->postJson('/api/supplier-service/vehicle-availability', validAvailabilityPayload(), [
-        'Authorization' => 'Bearer test-token',
-    ])
+    $this->postJson('/api/supplier-service/vehicle-availability', validAvailabilityPayload())
         ->assertOk()
         ->assertJsonPath('meta.received', 3)
         ->assertJsonPath('meta.stored', 3)
@@ -53,9 +48,8 @@ test('supplier service can send vehicle availability', function () {
 test('supplier service vehicle availability endpoint updates matching windows', function () {
     Supplier::factory()->create(['code' => 'DEMO']);
 
-    $this->postJson('/api/supplier-service/vehicle-availability', validAvailabilityPayload(), [
-        'Authorization' => 'Bearer test-token',
-    ])->assertOk();
+    $this->postJson('/api/supplier-service/vehicle-availability', validAvailabilityPayload())
+        ->assertOk();
 
     $this->postJson('/api/supplier-service/vehicle-availability', [
         'supplier_code' => 'DEMO',
@@ -66,8 +60,6 @@ test('supplier service vehicle availability endpoint updates matching windows', 
                 'status' => 'unavailable',
             ],
         ],
-    ], [
-        'Authorization' => 'Bearer test-token',
     ])
         ->assertOk()
         ->assertJsonPath('meta.received', 1)

@@ -63,6 +63,16 @@ class Country extends Model
     }
 
     /**
+     * Get suppliers based in this country.
+     *
+     * @return HasMany<Supplier, $this>
+     */
+    public function suppliers(): HasMany
+    {
+        return $this->hasMany(Supplier::class);
+    }
+
+    /**
      * Get the currency used by this country.
      *
      * @return BelongsTo<Currency, $this>

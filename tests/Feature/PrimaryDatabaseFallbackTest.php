@@ -230,9 +230,7 @@ test('api middleware returns 503 json when primary database is unavailable', fun
         ->once()
         ->andThrow(new PDOException('Connection refused'));
 
-    $this->postJson('/api/supplier-service/bookings', [], [
-        'Authorization' => 'Bearer '.config('services.supplier_service.token'),
-    ])
+    $this->postJson('/api/supplier-service/bookings', [])
         ->assertServiceUnavailable()
         ->assertJsonStructure(['message', 'incident_id']);
 });
@@ -249,9 +247,7 @@ test('api middleware returns 503 json when circuit breaker is open', function ()
 
     DB::shouldReceive('connection')->never();
 
-    $this->postJson('/api/supplier-service/bookings', [], [
-        'Authorization' => 'Bearer '.config('services.supplier_service.token'),
-    ])
+    $this->postJson('/api/supplier-service/bookings', [])
         ->assertServiceUnavailable()
         ->assertJsonStructure(['message', 'incident_id']);
 });

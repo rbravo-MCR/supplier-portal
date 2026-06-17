@@ -11,7 +11,7 @@
                 name="supplier_id"
                 :label="__('Proveedor')"
                 required
-                input:class="text-zinc-950! placeholder:text-zinc-600!"
+                class="bg-white! font-medium text-zinc-950! [color-scheme:light] [&>option]:bg-white [&>option]:text-zinc-950"
                 data-test="register-supplier"
             >
                 <flux:select.option value="">{{ __('Selecciona proveedor') }}</flux:select.option>

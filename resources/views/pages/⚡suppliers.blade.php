@@ -1,13 +1,15 @@
 <?php
 
-use App\Models\Supplier;
 use App\Jobs\RecordAuditLog;
+use App\Models\Country;
+use App\Models\Supplier;
 use App\Modules\Supplier\Application\DTOs\CreateSupplierData;
 use App\Modules\Supplier\Application\UseCases\CreateSupplier;
 use App\Modules\Supplier\Domain\Exceptions\SupplierCodeAlreadyExists;
 use Flux\Flux;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Computed;
@@ -21,6 +23,10 @@ new #[Title('Proveedores')] class extends Component {
     public string $name = '';
 
     public string $code = '';
+
+    public ?int $countryId = null;
+
+    public string $integrationType = Supplier::IntegrationNone;
 
     public ?int $maxUsers = null;
 
@@ -91,6 +97,14 @@ new #[Title('Proveedores')] class extends Component {
         $validated = $this->validate([
             'name' => ['required', 'string', 'max:255'],
             'code' => ['required', 'string', 'max:255', Rule::unique('suppliers', 'code')],
+            'countryId' => [
+                'required',
+                'integer',
+                Rule::exists('countries', 'id')->where(fn ($query) => $query
+                    ->where('status', 'active')
+                    ->where('iso2', '<>', 'MX')),
+            ],
+            'integrationType' => ['required', Rule::in([Supplier::IntegrationNone])],
             'status' => ['required', Rule::in(['active', 'inactive'])],
             'maxUsers' => ['nullable', 'integer', 'min:1', 'max:100000'],
             'contactName' => ['nullable', 'string', 'max:255'],
@@ -103,6 +117,8 @@ new #[Title('Proveedores')] class extends Component {
                 new CreateSupplierData(
                     name: $validated['name'],
                     code: $validated['code'],
+                    countryId: $validated['countryId'],
+                    integrationType: $validated['integrationType'],
                     status: $validated['status'],
                     maxUsers: $validated['maxUsers'],
                     contactName: $validated['contactName'] ?: null,
@@ -117,7 +133,8 @@ new #[Title('Proveedores')] class extends Component {
             return;
         }
 
-        $this->reset(['name', 'code', 'maxUsers', 'contactName', 'email', 'phone']);
+        $this->reset(['name', 'code', 'countryId', 'maxUsers', 'contactName', 'email', 'phone']);
+        $this->integrationType = Supplier::IntegrationNone;
         $this->status = 'active';
         $this->resetPage();
 
@@ -133,6 +150,9 @@ new #[Title('Proveedores')] class extends Component {
             'name.required' => __('Captura el nombre del proveedor.'),
             'code.required' => __('Captura el código del proveedor.'),
             'code.unique' => __('Ese código ya existe para otro proveedor.'),
+            'countryId.required' => __('Selecciona el país fiscal del proveedor.'),
+            'countryId.exists' => __('Solo se pueden dar de alta proveedores fuera de México.'),
+            'integrationType.in' => __('Solo se pueden dar de alta proveedores sin API ni SOAP.'),
             'status.required' => __('Selecciona el estado del proveedor.'),
             'maxUsers.min' => __('El límite de usuarios debe ser mayor a cero.'),
         ];
@@ -144,10 +164,25 @@ new #[Title('Proveedores')] class extends Component {
         return Gate::allows('create', Supplier::class);
     }
 
+    /**
+     * @return Collection<int, Country>
+     */
+    #[Computed]
+    public function countries(): Collection
+    {
+        return Country::query()
+            ->select(['id', 'name', 'iso2'])
+            ->active()
+            ->where('iso2', '<>', 'MX')
+            ->orderBy('name')
+            ->get();
+    }
+
     #[Computed]
     public function suppliers(): LengthAwarePaginator
     {
         return Supplier::query()
+            ->with('country:id,name,iso2')
             ->when($this->search !== '', function (Builder $query): void {
                 $query->search($this->search);
             })
@@ -197,6 +232,29 @@ new #[Title('Proveedores')] class extends Component {
                     <div>
                         <flux:input wire:model="code" :label="__('Código')" placeholder="ACME" data-test="supplier-code" />
                         @error('code')
+                            <div class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <flux:select wire:model="countryId" :label="__('País fiscal')" data-test="supplier-country">
+                            <flux:select.option value="">{{ __('Selecciona país') }}</flux:select.option>
+                            @foreach ($this->countries as $country)
+                                <flux:select.option :value="$country->id">{{ $country->name }} · {{ $country->iso2 }}</flux:select.option>
+                            @endforeach
+                        </flux:select>
+                        @error('countryId')
+                            <div class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</div>
+                        @enderror
+                    </div>
+
+                    <div>
+                        <flux:select wire:model="integrationType" :label="__('Integración')" data-test="supplier-integration-type">
+                            <flux:select.option value="none">{{ __('Sin API/SOAP') }}</flux:select.option>
+                            <flux:select.option value="api">{{ __('Tiene API') }}</flux:select.option>
+                            <flux:select.option value="soap">{{ __('Tiene SOAP') }}</flux:select.option>
+                        </flux:select>
+                        @error('integrationType')
                             <div class="mt-1 text-sm text-red-600 dark:text-red-400">{{ $message }}</div>
                         @enderror
                     </div>
@@ -260,6 +318,8 @@ new #[Title('Proveedores')] class extends Component {
             <flux:table.columns>
                 <flux:table.column>{{ __('Proveedor') }}</flux:table.column>
                 <flux:table.column>{{ __('Código') }}</flux:table.column>
+                <flux:table.column>{{ __('País') }}</flux:table.column>
+                <flux:table.column>{{ __('Integración') }}</flux:table.column>
                 <flux:table.column>{{ __('Estado') }}</flux:table.column>
                 <flux:table.column>{{ __('Límite') }}</flux:table.column>
                 <flux:table.column>{{ __('Contacto') }}</flux:table.column>
@@ -272,6 +332,8 @@ new #[Title('Proveedores')] class extends Component {
                     <flux:table.row :key="$supplier->id">
                         <flux:table.cell variant="strong">{{ $supplier->name }}</flux:table.cell>
                         <flux:table.cell>{{ $supplier->code }}</flux:table.cell>
+                        <flux:table.cell>{{ $supplier->country ? "{$supplier->country->name} · {$supplier->country->iso2}" : '-' }}</flux:table.cell>
+                        <flux:table.cell>{{ $supplier->integration_type === 'none' ? __('Sin API/SOAP') : str($supplier->integration_type)->upper() }}</flux:table.cell>
                         <flux:table.cell>
                             <div class="flex min-w-36 items-center gap-3">
                                 @can('update', $supplier)
@@ -326,7 +388,7 @@ new #[Title('Proveedores')] class extends Component {
                     </flux:table.row>
                 @empty
                     <flux:table.row>
-                        <flux:table.cell colspan="7">
+                        <flux:table.cell colspan="9">
                             <div class="py-8 text-center">
                                 <flux:text>{{ __('No hay proveedores para los filtros seleccionados.') }}</flux:text>
                             </div>

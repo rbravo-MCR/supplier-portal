@@ -13,8 +13,8 @@
 ])
 
 <div
-    class="relative"
-    x-data="{ open: false, selectedLabel: @js($selectedLabel ?: $placeholder), selectedIso2: @js($selectedIso2) }"
+    {{ $attributes->merge(['class' => 'relative']) }}
+    x-data="{ open: false }"
     x-on:click.outside="open = false"
 >
     <div class="mb-2 text-sm font-medium text-zinc-700 dark:text-zinc-200">{{ $label }}</div>
@@ -28,15 +28,14 @@
         <span class="flex min-w-0 items-center gap-2">
             @if($selectedIso2 !== null)
                 <img
-                    x-bind:src="selectedIso2 ? `https://flagcdn.com/w20/${selectedIso2.toLowerCase()}.png` : ''"
-                    x-bind:srcset="selectedIso2 ? `https://flagcdn.com/w40/${selectedIso2.toLowerCase()}.png 2x` : ''"
+                    src="https://flagcdn.com/w20/{{ strtolower($selectedIso2) }}.png"
+                    srcset="https://flagcdn.com/w40/{{ strtolower($selectedIso2) }}.png 2x"
                     alt=""
                     class="h-3.5 w-5 shrink-0 rounded-[2px] object-cover"
                     loading="lazy"
-                    x-show="selectedIso2"
                 >
             @endif
-            <span class="truncate" x-text="selectedLabel"></span>
+            <span class="truncate">{{ $selectedLabel ?: $placeholder }}</span>
         </span>
         <flux:icon name="chevron-down" class="size-4 shrink-0 text-zinc-400" />
     </button>
@@ -67,9 +66,9 @@
                     type="button"
                     @if($live)
                         wire:click="$set('{{ $property }}', {{ $option['value'] }})"
-                        x-on:click="selectedLabel = @js($option['label']); selectedIso2 = @js($option['iso2'] ?? null); open = false"
+                        x-on:click="open = false"
                     @else
-                        x-on:click="$wire.set('{{ $property }}', {{ $option['value'] }}, false); selectedLabel = @js($option['label']); selectedIso2 = @js($option['iso2'] ?? null); open = false"
+                        x-on:click="$wire.set('{{ $property }}', {{ $option['value'] }}, false); open = false"
                     @endif
                     class="flex w-full items-center rounded-md px-3 py-2 text-start text-sm text-zinc-700 hover:bg-zinc-100 dark:text-zinc-200 dark:hover:bg-zinc-800"
                     wire:key="{{ $property }}-option-{{ $option['value'] }}"

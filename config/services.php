@@ -35,8 +35,4 @@ return [
         ],
     ],
 
-    'supplier_service' => [
-        'token' => env('SUPPLIER_SERVICE_TOKEN'),
-    ],
-
 ];

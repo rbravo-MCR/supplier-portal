@@ -1,11 +1,13 @@
 <?php
 
+use App\Models\Country;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Modules\Supplier\Application\DTOs\CreateSupplierData;
 use App\Modules\Supplier\Application\UseCases\CreateSupplier;
 use App\Modules\Supplier\Domain\Exceptions\SupplierCodeAlreadyExists;
 use App\Policies\SupplierPolicy;
+use Illuminate\Validation\ValidationException;
 
 test('only platform administrators can create suppliers', function () {
     $policy = new SupplierPolicy;
@@ -30,11 +32,14 @@ test('platform roles can view suppliers but supplier roles cannot', function () 
 
 test('super admin can create a supplier with configurable limits', function () {
     $actor = User::factory()->create(['role' => 'super_admin', 'supplier_id' => null]);
+    $country = Country::factory()->create(['iso2' => 'US']);
 
     $supplier = app(CreateSupplier::class)->handle(
         new CreateSupplierData(
             name: 'Acme Car Rentals',
             code: ' acme ',
+            countryId: $country->id,
+            integrationType: 'none',
             status: 'inactive',
             maxUsers: 8,
             contactName: 'Jane Admin',
@@ -53,6 +58,8 @@ test('super admin can create a supplier with configurable limits', function () {
         'id' => $supplier->id,
         'name' => 'Acme Car Rentals',
         'code' => 'ACME',
+        'country_id' => $country->id,
+        'integration_type' => 'none',
         'status' => 'inactive',
         'max_users' => 8,
     ]);
@@ -69,6 +76,7 @@ test('super admin can create a supplier with configurable limits', function () {
 
 test('supplier code must be unique', function () {
     Supplier::factory()->create(['code' => 'ACME']);
+    $country = Country::factory()->create(['iso2' => 'US']);
 
     $actor = User::factory()->create(['role' => 'super_admin', 'supplier_id' => null]);
 
@@ -76,6 +84,8 @@ test('supplier code must be unique', function () {
         new CreateSupplierData(
             name: 'Acme Duplicate',
             code: 'acme',
+            countryId: $country->id,
+            integrationType: 'none',
             status: 'active',
             maxUsers: null,
             contactName: null,
@@ -85,6 +95,30 @@ test('supplier code must be unique', function () {
         $actor,
     );
 })->throws(SupplierCodeAlreadyExists::class);
+
+test('supplier creation rejects mexican or integrated suppliers', function (string $iso2, string $integrationType) {
+    $actor = User::factory()->create(['role' => 'super_admin', 'supplier_id' => null]);
+    $country = Country::factory()->create(['iso2' => $iso2]);
+
+    app(CreateSupplier::class)->handle(
+        new CreateSupplierData(
+            name: 'Ineligible Supplier',
+            code: 'INELIGIBLE',
+            countryId: $country->id,
+            integrationType: $integrationType,
+            status: 'active',
+            maxUsers: null,
+            contactName: null,
+            email: null,
+            phone: null,
+        ),
+        $actor,
+    );
+})->with([
+    'mexico' => ['MX', 'none'],
+    'api' => ['US', 'api'],
+    'soap' => ['US', 'soap'],
+])->throws(ValidationException::class);
 
 test('auditors can view but cannot mutate a supplier', function () {
     $policy = new SupplierPolicy;

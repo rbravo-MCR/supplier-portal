@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Country;
 use App\Models\Supplier;
 use App\Models\User;
 use Livewire\Livewire;
@@ -42,11 +43,17 @@ test('supplier scoped admins cannot view the suppliers directory', function () {
 
 test('admin can create suppliers from the page', function () {
     $user = User::factory()->create(['role' => 'admin', 'supplier_id' => null]);
+    $country = Country::factory()->create([
+        'name' => 'United States',
+        'iso2' => 'US',
+    ]);
 
     Livewire::actingAs($user)
         ->test('pages::suppliers')
         ->set('name', 'Acme Car Rentals')
         ->set('code', ' acme ')
+        ->set('countryId', $country->id)
+        ->set('integrationType', 'none')
         ->set('status', 'inactive')
         ->set('maxUsers', 8)
         ->set('contactName', 'Jane Admin')
@@ -58,6 +65,8 @@ test('admin can create suppliers from the page', function () {
     $this->assertDatabaseHas('suppliers', [
         'name' => 'Acme Car Rentals',
         'code' => 'ACME',
+        'country_id' => $country->id,
+        'integration_type' => 'none',
         'max_users' => 8,
         'contact_name' => 'Jane Admin',
         'email' => 'ops@example.com',
@@ -65,6 +74,65 @@ test('admin can create suppliers from the page', function () {
         'status' => 'inactive',
     ]);
 });
+
+test('supplier creation shows every active country outside mexico', function () {
+    $user = User::factory()->create(['role' => 'admin', 'supplier_id' => null]);
+    Country::factory()->create(['name' => 'México', 'iso2' => 'MX']);
+
+    foreach (['AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AH', 'AI', 'AJ', 'AK', 'AL', 'AM', 'AN', 'AO', 'AP', 'AQ', 'AR', 'AS', 'AT', 'AU', 'AV', 'AW', 'AX', 'AY', 'AZ', 'BA', 'BB', 'BC', 'BD', 'ZZ'] as $index => $iso2) {
+        Country::factory()->create([
+            'name' => sprintf('Country %02d', $index + 1),
+            'iso2' => $iso2,
+        ]);
+    }
+
+    Livewire::actingAs($user)
+        ->test('pages::suppliers')
+        ->assertSee('Country 31 · ZZ')
+        ->assertDontSee('México · MX');
+});
+
+test('admin cannot create suppliers based in mexico', function () {
+    $user = User::factory()->create(['role' => 'admin', 'supplier_id' => null]);
+    $mexico = Country::factory()->create([
+        'name' => 'México',
+        'iso2' => 'MX',
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::suppliers')
+        ->set('name', 'Mexico Cars')
+        ->set('code', 'MXCARS')
+        ->set('countryId', $mexico->id)
+        ->set('integrationType', 'none')
+        ->call('save')
+        ->assertHasErrors(['countryId']);
+
+    $this->assertDatabaseMissing('suppliers', [
+        'code' => 'MXCARS',
+    ]);
+});
+
+test('admin cannot create suppliers with api or soap integrations', function (string $integrationType) {
+    $user = User::factory()->create(['role' => 'admin', 'supplier_id' => null]);
+    $country = Country::factory()->create([
+        'name' => 'United States',
+        'iso2' => 'US',
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::suppliers')
+        ->set('name', 'Integrated Cars')
+        ->set('code', 'INTEGRATED')
+        ->set('countryId', $country->id)
+        ->set('integrationType', $integrationType)
+        ->call('save')
+        ->assertHasErrors(['integrationType']);
+
+    $this->assertDatabaseMissing('suppliers', [
+        'code' => 'INTEGRATED',
+    ]);
+})->with(['api', 'soap']);
 
 test('supplier search filters by code', function () {
     $user = User::factory()->create(['role' => 'admin', 'supplier_id' => null]);

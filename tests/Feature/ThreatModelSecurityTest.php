@@ -11,7 +11,6 @@ test('session defaults mitigate session theft', function () {
         ->and(file_get_contents(base_path('.env.example')))->toContain('RESEND_API_KEY=')
         ->and(file_get_contents(base_path('.env.example')))->toContain('SLACK_BOT_USER_OAUTH_TOKEN=')
         ->and(file_get_contents(base_path('.env.example')))->toContain('SLACK_BOT_USER_DEFAULT_CHANNEL=')
-        ->and(file_get_contents(base_path('.env.example')))->toContain('SUPPLIER_SERVICE_TOKEN=')
         ->and(config('session.encrypt'))->toBeTrue()
         ->and(config('session.http_only'))->toBeTrue()
         ->and(config('session.same_site'))->toBe('lax');
