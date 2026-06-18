@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Country;
 use App\Models\Currency;
 use App\Models\Office;
 use App\Models\Rate;
@@ -40,8 +41,7 @@ test('pricing page displays vehicle rate data', function () {
         ->assertSee('SUV')
         ->assertSee('IFAR')
         ->assertSee('CUN')
-        ->assertSee('$')
-        ->assertSee('125.50');
+        ->assertSee('USD 125,50');
 });
 
 test('pricing form publishes a new vehicle rate', function () {
@@ -102,6 +102,58 @@ test('pricing form publishes a new vehicle rate', function () {
         'base_price' => 199.99,
         'status' => 'active',
     ]);
+});
+
+test('pricing form defaults currency from supplier country not user locale', function () {
+    $mxn = Currency::query()->firstOrCreate(
+        ['code' => 'MXN'],
+        ['numeric_code' => '484', 'name' => 'Mexican Peso', 'symbol' => '$', 'decimal_places' => 2, 'is_active' => true],
+    );
+    Currency::query()->firstOrCreate(
+        ['code' => 'USD'],
+        ['numeric_code' => '840', 'name' => 'US Dollar', 'symbol' => '$', 'decimal_places' => 2, 'is_active' => true],
+    );
+    $country = Country::factory()->for($mxn, 'currency')->create([
+        'iso2' => 'MX',
+        'name' => 'México',
+    ]);
+    $supplier = Supplier::factory()->create([
+        'country_id' => $country->id,
+    ]);
+    $user = User::factory()->create([
+        'role' => 'supplier_pricing',
+        'supplier_id' => $supplier->id,
+        'preferred_locale' => 'en',
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::pricing')
+        ->assertSet('currencyId', $mxn->id);
+});
+
+test('admin supplier selection defaults currency from selected supplier country', function () {
+    $brl = Currency::query()->firstOrCreate(
+        ['code' => 'BRL'],
+        ['numeric_code' => '986', 'name' => 'Brazilian Real', 'symbol' => 'R$', 'decimal_places' => 2, 'is_active' => true],
+    );
+    $country = Country::factory()->for($brl, 'currency')->create([
+        'iso2' => 'BR',
+        'name' => 'Brasil',
+    ]);
+    $supplier = Supplier::factory()->create([
+        'country_id' => $country->id,
+    ]);
+    $user = User::factory()->create([
+        'role' => 'admin',
+        'supplier_id' => null,
+        'preferred_locale' => 'fr',
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::pricing')
+        ->assertSet('currencyId', null)
+        ->set('supplierId', $supplier->id)
+        ->assertSet('currencyId', $brl->id);
 });
 
 test('supplier user cannot publish rates for another supplier by changing livewire state', function () {

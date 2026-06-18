@@ -4,6 +4,8 @@ namespace App\Support;
 
 use App\Models\Supplier;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\File;
 use ZipArchive;
 
 class RateImportTemplateSpreadsheet
@@ -11,21 +13,58 @@ class RateImportTemplateSpreadsheet
     /**
      * Create a supplier-specific XLSX template.
      */
-    public function create(Supplier $supplier): string
+    public function create(Supplier $supplier, ?string $locale = null): string
     {
+        $locale = SupportedLocale::normalize($locale ?? App::currentLocale());
         $path = tempnam(sys_get_temp_dir(), 'rate-template-');
+        $this->write($path, $supplier, $locale);
+
+        return $path;
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function ensureLocalizedTemplates(?Supplier $supplier = null): array
+    {
+        $supplier ??= new Supplier([
+            'name' => __('Proveedor demo'),
+            'code' => 'DEMO',
+        ]);
+
+        File::ensureDirectoryExists((string) config('imports.pricing_template.templates_path'));
+
+        $paths = [];
+
+        foreach (SupportedLocale::codes() as $locale) {
+            $path = (string) config('imports.pricing_template.templates_path').DIRECTORY_SEPARATOR."supplier-prices-{$locale}.xlsx";
+            $this->write($path, $supplier, $locale);
+            $paths[$locale] = $path;
+        }
+
+        return $paths;
+    }
+
+    protected function write(string $path, Supplier $supplier, string $locale): void
+    {
         $archive = new ZipArchive;
         $archive->open($path, ZipArchive::CREATE | ZipArchive::OVERWRITE);
+
+        $columns = $this->columns();
+        $internalHeaders = array_keys($columns);
+        $displayHeaders = array_map(fn (string $key): string => $this->label($key, $locale), $internalHeaders);
+        $dateFormat = (string) config("locales.supported.{$locale}.date_format", 'Y-m-d');
 
         $rows = [
             ['', 'OUTLET CAR RENTAL'],
             [],
-            ['Nombre:', $supplier->name],
-            ['Número:', $supplier->code],
+            [__('Nombre:', locale: $locale), $supplier->name],
+            [__('Número:', locale: $locale), $supplier->code],
             [],
-            RateImportSpreadsheet::REQUIRED_HEADERS,
-            ['CUN', 'SUV', 'IFAR', 'STD', 'MXN', '1250.00', '2026-07-01', '2026-07-31'],
-            ['CUN', 'COMPACT', 'CDAR', 'WEEKEND', 'MXN', '890.00', '2026-07-01', '2026-07-31'],
+            $displayHeaders,
+            $internalHeaders,
+            ['SUV', 'IFAR', '1250.00', 'MXN', now()->setDate(2026, 7, 1)->format($dateFormat), now()->setDate(2026, 7, 31)->format($dateFormat), 'WEEKEND', 'CUN'],
+            ['COMPACT', 'CDAR', '890.00', 'MXN', now()->setDate(2026, 7, 1)->format($dateFormat), now()->setDate(2026, 7, 31)->format($dateFormat), '', 'CUN'],
         ];
 
         $strings = collect($rows)->flatten()->map(fn (?string $value): string => (string) $value)->values();
@@ -39,8 +78,6 @@ class RateImportTemplateSpreadsheet
         $this->addLogo($archive);
 
         $archive->close();
-
-        return $path;
     }
 
     protected function addContentTypes(ZipArchive $archive): void
@@ -98,7 +135,7 @@ XML);
         $archive->addFromString('xl/workbook.xml', <<<'XML'
 <?xml version="1.0" encoding="UTF-8"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <sheets><sheet name="Precios" sheetId="1" r:id="rId1"/></sheets>
+  <sheets><sheet name="Prices" sheetId="1" r:id="rId1"/></sheets>
 </workbook>
 XML);
     }
@@ -164,7 +201,9 @@ XML);
                     })
                     ->implode('');
 
-                return '<row r="'.($rowIndex + 1).'">'.$cells.'</row>';
+                $hidden = $rowIndex === 6 ? ' hidden="1"' : '';
+
+                return '<row r="'.($rowIndex + 1).'"'.$hidden.'>'.$cells.'</row>';
             })
             ->implode('');
 
@@ -179,6 +218,22 @@ XML);
   <drawing r:id="rId1"/>
 </worksheet>
 XML);
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    protected function columns(): array
+    {
+        return config('imports.pricing_template.columns', []);
+    }
+
+    protected function label(string $key, string $locale): string
+    {
+        $column = $this->columns()[$key] ?? [];
+        $translationKey = $column['translation_key'] ?? null;
+
+        return is_string($translationKey) ? __($translationKey, locale: $locale) : $key;
     }
 
     protected function addLogo(ZipArchive $archive): void

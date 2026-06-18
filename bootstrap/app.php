@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsurePrimaryDatabaseIsAvailable;
+use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\SetTeamUrlDefaults;
 use App\Shared\Support\IncidentId;
 use Illuminate\Foundation\Application;
@@ -36,6 +37,7 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->web(append: [
+            SetLocale::class,
             SetTeamUrlDefaults::class,
         ]);
     })

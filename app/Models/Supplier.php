@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
-#[Fillable(['uuid', 'name', 'code', 'country_id', 'integration_type', 'status', 'max_users', 'contact_name', 'email', 'phone'])]
+#[Fillable(['uuid', 'name', 'code', 'country_id', 'timezone', 'integration_type', 'status', 'max_users', 'contact_name', 'email', 'phone'])]
 class Supplier extends Model
 {
     /** @use HasFactory<SupplierFactory> */

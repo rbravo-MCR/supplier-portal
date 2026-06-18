@@ -113,7 +113,7 @@ new class extends Component {
         @foreach ($this->statusBars as $status)
             <div class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900" wire:key="status-card-{{ $status['key'] }}">
                 <flux:text>{{ $status['label'] }}</flux:text>
-                <div class="mt-2 text-3xl font-semibold {{ $status['text'] }}">{{ $status['count'] }}</div>
+                <div class="mt-2 text-3xl font-semibold {{ $status['text'] }}">{{ format_number($status['count']) }}</div>
             </div>
         @endforeach
     </div>
@@ -121,7 +121,7 @@ new class extends Component {
     <div class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
         <div class="mb-5 flex flex-col gap-1">
             <flux:heading>{{ __('Reservas por estado') }}</flux:heading>
-            <flux:text>{{ __('Total en el periodo') }}: {{ $this->totalBookings }}</flux:text>
+            <flux:text>{{ __('Total en el periodo') }}: {{ format_number($this->totalBookings) }}</flux:text>
         </div>
 
         <div class="flex flex-col gap-5">
@@ -129,17 +129,17 @@ new class extends Component {
                 <div class="grid gap-2 md:grid-cols-[9rem_1fr_4rem] md:items-center" wire:key="status-bar-{{ $status['key'] }}">
                     <div class="flex items-center justify-between gap-3 md:block">
                         <span class="text-sm font-medium text-zinc-800 dark:text-zinc-100">{{ $status['label'] }}</span>
-                        <span class="text-sm font-semibold {{ $status['text'] }} md:hidden">{{ $status['count'] }}</span>
+                        <span class="text-sm font-semibold {{ $status['text'] }} md:hidden">{{ format_number($status['count']) }}</span>
                     </div>
 
                     <div class="h-8 overflow-hidden rounded-md bg-zinc-100 dark:bg-zinc-800">
                         <div class="flex h-full min-w-8 items-center justify-end rounded-md px-2 text-xs font-semibold text-white {{ $status['bar'] }}" style="width: {{ $status['percent'] }}%">
-                            {{ $status['count'] }}
+                            {{ format_number($status['count']) }}
                         </div>
                     </div>
 
                     <div class="hidden text-right text-sm font-semibold {{ $status['text'] }} md:block">
-                        {{ $status['count'] }}
+                        {{ format_number($status['count']) }}
                     </div>
                 </div>
             @endforeach

@@ -180,11 +180,11 @@ new #[Title('Disponibilidad')] class extends Component {
                         <flux:table.cell>{{ $availability->supplier?->code ?? '-' }}</flux:table.cell>
                         <flux:table.cell align="end">
                             <span class="{{ $availability->available_quantity > 0 ? 'text-green-600 dark:text-green-400' : 'text-zinc-400' }} font-semibold tabular-nums">
-                                {{ $availability->available_quantity }}
+                                {{ format_number($availability->available_quantity) }}
                             </span>
                         </flux:table.cell>
                         <flux:table.cell class="tabular-nums text-xs">
-                            {{ $availability->valid_from->format('Y-m-d') }} / {{ $availability->valid_to->format('Y-m-d') }}
+                            {{ format_date($availability->valid_from) }} / {{ format_date($availability->valid_to) }}
                         </flux:table.cell>
                         <flux:table.cell>
                             <flux:badge :color="$availability->status === 'available' ? 'green' : 'zinc'">

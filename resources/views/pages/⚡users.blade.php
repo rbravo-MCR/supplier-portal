@@ -4,6 +4,7 @@ use App\Concerns\RemembersModelRows;
 use App\Models\Role;
 use App\Models\Supplier;
 use App\Models\User;
+use App\Support\SupportedLocale;
 use Flux\Flux;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -35,6 +36,8 @@ new #[Title('Usuarios')] class extends Component {
 
     public string $search = '';
 
+    public string $localeFilter = '';
+
     public function mount(): void
     {
         $this->supplierId = Auth::user()->supplier_id;
@@ -42,6 +45,15 @@ new #[Title('Usuarios')] class extends Component {
 
     public function updatedSearch(): void
     {
+        $this->resetPage();
+    }
+
+    public function updatedLocaleFilter(): void
+    {
+        if ($this->localeFilter !== '' && ! SupportedLocale::isSupported($this->localeFilter)) {
+            $this->localeFilter = '';
+        }
+
         $this->resetPage();
     }
 
@@ -110,6 +122,15 @@ new #[Title('Usuarios')] class extends Component {
             ->orderByRaw("case scope when 'platform' then 0 else 1 end")
             ->orderBy('name')
             ->get();
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    #[Computed]
+    public function localeOptions(): array
+    {
+        return SupportedLocale::options();
     }
 
     /**
@@ -184,6 +205,9 @@ new #[Title('Usuarios')] class extends Component {
             ->when($this->search !== '', function (Builder $query): void {
                 $query->search($this->search);
             })
+            ->when(! Auth::user()->supplier_id && SupportedLocale::isSupported($this->localeFilter), function (Builder $query): void {
+                $query->where('preferred_locale', $this->localeFilter);
+            })
             ->orderBy('name')
             ->paginate(10);
     }
@@ -252,7 +276,18 @@ new #[Title('Usuarios')] class extends Component {
                 <flux:text>{{ __('Cuentas con acceso al portal.') }}</flux:text>
             </div>
 
-            <flux:input wire:model.live.debounce.300ms="search" :label="__('Buscar')" placeholder="Nombre, correo o rol" class="md:w-80" data-test="user-search" />
+            <div class="grid gap-3 md:grid-cols-2">
+                @if (! Auth::user()->supplier_id)
+                    <flux:select wire:model.live="localeFilter" :label="__('Idioma')" data-test="user-locale-filter">
+                        <flux:select.option value="">{{ __('Todos los idiomas') }}</flux:select.option>
+                        @foreach ($this->localeOptions as $locale => $name)
+                            <flux:select.option :value="$locale">{{ $name }}</flux:select.option>
+                        @endforeach
+                    </flux:select>
+                @endif
+
+                <flux:input wire:model.live.debounce.300ms="search" :label="__('Buscar')" placeholder="Nombre, correo o rol" class="md:w-80" data-test="user-search" />
+            </div>
         </div>
 
         <flux:table :paginate="$this->users">
@@ -262,6 +297,7 @@ new #[Title('Usuarios')] class extends Component {
                 <flux:table.column>{{ __('Correo') }}</flux:table.column>
                 <flux:table.column>{{ __('Proveedor') }}</flux:table.column>
                 <flux:table.column>{{ __('Rol') }}</flux:table.column>
+                <flux:table.column>{{ __('Idioma') }}</flux:table.column>
                 <flux:table.column>{{ __('Estado') }}</flux:table.column>
                 <flux:table.column>{{ __('Último acceso') }}</flux:table.column>
             </flux:table.columns>
@@ -284,6 +320,7 @@ new #[Title('Usuarios')] class extends Component {
                                 } }}
                             </flux:badge>
                         </flux:table.cell>
+                        <flux:table.cell>{{ SupportedLocale::label($user->preferred_locale) }}</flux:table.cell>
                         <flux:table.cell>
                             <flux:badge :color="$user->status === 'active' ? 'green' : 'zinc'">
                                 {{ $user->status === 'active' ? __('Activo') : __('Inactivo') }}
@@ -293,7 +330,7 @@ new #[Title('Usuarios')] class extends Component {
                     </flux:table.row>
                 @empty
                     <flux:table.row>
-                        <flux:table.cell colspan="7">
+                        <flux:table.cell colspan="8">
                             <div class="py-8 text-center">
                                 <flux:text>{{ __('Aún no hay usuarios registrados.') }}</flux:text>
                             </div>

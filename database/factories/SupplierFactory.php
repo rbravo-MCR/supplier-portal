@@ -23,6 +23,7 @@ class SupplierFactory extends Factory
             'name' => fake()->company(),
             'code' => Str::upper(fake()->unique()->bothify('SUP-####')),
             'status' => 'active',
+            'timezone' => null,
             'max_users' => null,
             'contact_name' => fake()->name(),
             'email' => fake()->unique()->companyEmail(),

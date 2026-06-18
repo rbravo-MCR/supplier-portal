@@ -55,6 +55,7 @@ test('admin can create suppliers from the page', function () {
         ->set('countryId', $country->id)
         ->set('integrationType', 'none')
         ->set('status', 'inactive')
+        ->set('timezone', 'America/New_York')
         ->set('maxUsers', 8)
         ->set('contactName', 'Jane Admin')
         ->set('email', 'OPS@EXAMPLE.COM')
@@ -66,12 +67,35 @@ test('admin can create suppliers from the page', function () {
         'name' => 'Acme Car Rentals',
         'code' => 'ACME',
         'country_id' => $country->id,
+        'timezone' => 'America/New_York',
         'integration_type' => 'none',
         'max_users' => 8,
         'contact_name' => 'Jane Admin',
         'email' => 'ops@example.com',
         'phone' => '+52 555 0100',
         'status' => 'inactive',
+    ]);
+});
+
+test('admin cannot create suppliers with invalid timezone', function () {
+    $user = User::factory()->create(['role' => 'admin', 'supplier_id' => null]);
+    $country = Country::factory()->create([
+        'name' => 'United States',
+        'iso2' => 'US',
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::suppliers')
+        ->set('name', 'Timezone Cars')
+        ->set('code', 'TZCARS')
+        ->set('countryId', $country->id)
+        ->set('integrationType', 'none')
+        ->set('timezone', 'Invalid/Timezone')
+        ->call('save')
+        ->assertHasErrors(['timezone']);
+
+    $this->assertDatabaseMissing('suppliers', [
+        'code' => 'TZCARS',
     ]);
 });
 

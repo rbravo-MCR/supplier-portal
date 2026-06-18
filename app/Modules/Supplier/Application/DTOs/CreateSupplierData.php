@@ -13,6 +13,7 @@ class CreateSupplierData
         public readonly int $countryId,
         public readonly string $integrationType,
         public readonly string $status,
+        public readonly ?string $timezone,
         public readonly ?int $maxUsers,
         public readonly ?string $contactName,
         public readonly ?string $email,

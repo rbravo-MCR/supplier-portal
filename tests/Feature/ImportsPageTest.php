@@ -8,6 +8,7 @@ use App\Support\RateImportSpreadsheet;
 use App\Support\RateImportTemplateSpreadsheet;
 use Illuminate\Database\Eloquent\Factories\Sequence;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 
@@ -154,12 +155,13 @@ test('supplier rate template can be downloaded', function () {
     $user = User::factory()->create([
         'role' => 'supplier_admin',
         'supplier_id' => $supplier->id,
+        'preferred_locale' => 'en',
     ]);
 
     $this->actingAs($user)
         ->get(route('portal.imports.template', $supplier->id))
         ->assertOk()
-        ->assertDownload('plantilla-precios-DEMO.xlsx');
+        ->assertDownload('supplier-prices-DEMO-en.xlsx');
 });
 
 test('rate template header is accepted by the import reader', function () {
@@ -168,19 +170,120 @@ test('rate template header is accepted by the import reader', function () {
         'code' => '1410',
     ]);
 
-    $path = app(RateImportTemplateSpreadsheet::class)->create($supplier);
+    $path = app(RateImportTemplateSpreadsheet::class)->create($supplier, 'en');
 
     try {
-        $parsed = app(RateImportSpreadsheet::class)->read($path);
+        $parsed = app(RateImportSpreadsheet::class)->read($path, 'en');
+        $strings = excelSharedStrings($path);
     } finally {
         @unlink($path);
     }
 
     expect($parsed['missing_headers'])->toBe([])
         ->and($parsed['headers'])->toContain('office_code')
+        ->and($parsed['headers'])->toContain('promotion')
         ->and($parsed['rows'])->toHaveCount(2)
-        ->and($parsed['rows'][0]['office_code'])->toBe('CUN')
-        ->and($parsed['rows'][0]['base_price'])->toBe('1250.00');
+        ->and($parsed['rows'][0]['vehicle_name'])->toBe('SUV')
+        ->and($parsed['rows'][0]['price'])->toBe('1250.00')
+        ->and($strings)->toContain('Vehicle')
+        ->and($strings)->toContain('Category')
+        ->and($strings)->toContain('Price')
+        ->and($strings)->toContain('Valid from');
+});
+
+test('localized supplier templates are generated for every supported locale', function () {
+    $supplier = Supplier::factory()->create(['code' => 'DEMO']);
+    $paths = app(RateImportTemplateSpreadsheet::class)->ensureLocalizedTemplates($supplier);
+
+    expect(array_keys($paths))->toBe(['es', 'en', 'pt', 'fr']);
+
+    foreach ($paths as $locale => $path) {
+        expect($path)->toEndWith("supplier-prices-{$locale}.xlsx")
+            ->and(is_file($path))->toBeTrue();
+    }
+});
+
+test('import reader accepts translated excel headers without using them as business keys', function () {
+    $path = tempExcelPath([
+        ['Office', 'Vehicle', 'Category', 'Price', 'Currency', 'Valid from', 'Valid until', 'Promotion'],
+        ['CUN', 'SUV', 'IFAR', '125.50', 'USD', '06/05/2026', '07/05/2026', 'Weekend'],
+    ]);
+
+    try {
+        $parsed = app(RateImportSpreadsheet::class)->read($path, 'en');
+    } finally {
+        @unlink($path);
+    }
+
+    expect($parsed['missing_headers'])->toBe([])
+        ->and($parsed['headers'])->toBe([
+            'office_code',
+            'vehicle_name',
+            'category',
+            'price',
+            'currency',
+            'valid_from',
+            'valid_until',
+            'promotion',
+        ])
+        ->and($parsed['rows'][0])->toMatchArray([
+            'office_code' => 'CUN',
+            'vehicle_name' => 'SUV',
+            'category' => 'IFAR',
+            'price' => '125.50',
+        ]);
+});
+
+test('import reader returns translated row validation errors', function (string $locale, string $expectedMessage) {
+    App::setLocale($locale);
+
+    $path = tempExcelPath([
+        [headerForLocale('vehicle_name', $locale), headerForLocale('category', $locale), headerForLocale('price', $locale), headerForLocale('currency', $locale), headerForLocale('valid_from', $locale), headerForLocale('valid_until', $locale)],
+        ['SUV', 'IFAR', '', 'USD', '2026-06-05', '2026-07-05'],
+    ]);
+
+    try {
+        $parsed = app(RateImportSpreadsheet::class)->read($path, $locale);
+    } finally {
+        @unlink($path);
+    }
+
+    expect($parsed['summary'])->toBe([
+        'processed' => 1,
+        'successful' => 0,
+        'failed' => 1,
+    ])->and($parsed['errors'][0]['message'])->toBe($expectedMessage);
+})->with([
+    'es' => ['es', 'Fila 2: Precio es obligatorio.'],
+    'en' => ['en', 'Row 2: Price is required.'],
+    'pt' => ['pt', 'Linha 2: Preço é obrigatório.'],
+    'fr' => ['fr', 'Ligne 2 : Prix est obligatoire.'],
+]);
+
+test('imports page shows translated error summary and downloadable error report', function () {
+    $supplier = Supplier::factory()->create();
+    $user = User::factory()->create([
+        'role' => 'supplier_admin',
+        'supplier_id' => $supplier->id,
+        'preferred_locale' => 'en',
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::imports')
+        ->set('file', excelUpload([
+            ['Vehicle', 'Category', 'Price', 'Currency', 'Valid from', 'Valid until'],
+            ['SUV', 'IFAR', '', 'USD', '2026-06-05', '2026-07-05'],
+        ]))
+        ->assertSet('formatIsValid', false)
+        ->assertSet('importSummary', [
+            'processed' => 1,
+            'successful' => 0,
+            'failed' => 1,
+        ])
+        ->assertSee('The file contains rows with errors.')
+        ->assertSee('Total processed rows')
+        ->assertSee('Downloadable error file')
+        ->assertSee('data-test="import-errors-download"', false);
 });
 
 test('imports page validates the expected excel format before upload', function () {
@@ -255,6 +358,48 @@ test('imports page uploads validated excel files into staging rows', function ()
 function excelUpload(array $rows): UploadedFile
 {
     return UploadedFile::fake()->createWithContent('rates.xlsx', excelContent($rows));
+}
+
+/**
+ * @param  list<list<string>>  $rows
+ */
+function tempExcelPath(array $rows): string
+{
+    $path = tempnam(sys_get_temp_dir(), 'xlsx');
+    file_put_contents($path, excelContent($rows));
+
+    return $path;
+}
+
+function headerForLocale(string $key, string $locale): string
+{
+    $column = config("imports.pricing_template.columns.{$key}");
+
+    return $column['aliases'][$locale][0];
+}
+
+/**
+ * @return list<string>
+ */
+function excelSharedStrings(string $path): array
+{
+    $archive = new ZipArchive;
+    $archive->open($path);
+    $xml = $archive->getFromName('xl/sharedStrings.xml');
+    $archive->close();
+
+    if ($xml === false) {
+        return [];
+    }
+
+    $document = new SimpleXMLElement($xml);
+    $strings = [];
+
+    foreach ($document->si as $item) {
+        $strings[] = trim((string) $item->t);
+    }
+
+    return $strings;
 }
 
 /**

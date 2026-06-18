@@ -60,5 +60,8 @@ jobs:
       - name: Build Assets
         run: npm run build
 
+      - name: Run I18N Audit
+        run: php artisan i18n:audit
+
       - name: Run Tests
         run: ./vendor/bin/pest

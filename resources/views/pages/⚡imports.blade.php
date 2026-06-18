@@ -5,6 +5,7 @@ use App\Models\Office;
 use App\Models\Supplier;
 use App\Modules\Import\Application\DTOs\CreateRateImportData;
 use App\Modules\Import\Application\UseCases\CreateRateImport;
+use App\Support\RateImportErrorSpreadsheet;
 use App\Support\RateImportSpreadsheet;
 use Flux\Flux;
 use Illuminate\Database\Eloquent\Builder;
@@ -37,6 +38,17 @@ new #[Title('Importaciones')] class extends Component {
     public int $detectedRows = 0;
 
     /**
+     * @var array{processed: int, successful: int, failed: int}
+     */
+    public array $importSummary = [
+        'processed' => 0,
+        'successful' => 0,
+        'failed' => 0,
+    ];
+
+    public string $errorReportFilename = '';
+
+    /**
      * @var list<array<string, mixed>>
      */
     public array $parsedRows = [];
@@ -46,7 +58,7 @@ new #[Title('Importaciones')] class extends Component {
         $this->supplierId = Auth::user()->supplier_id;
     }
 
-    public function updatedFile(RateImportSpreadsheet $spreadsheet): void
+    public function updatedFile(RateImportSpreadsheet $spreadsheet, RateImportErrorSpreadsheet $errorSpreadsheet): void
     {
         $this->resetValidationState();
 
@@ -59,7 +71,7 @@ new #[Title('Importaciones')] class extends Component {
         ]);
 
         try {
-            $parsed = $spreadsheet->read($this->file->getRealPath());
+            $parsed = $spreadsheet->read($this->file->getRealPath(), app()->getLocale());
         } catch (Throwable $exception) {
             $this->validationMessage = $exception->getMessage();
             $this->addError('file', $this->validationMessage);
@@ -69,8 +81,18 @@ new #[Title('Importaciones')] class extends Component {
 
         if ($parsed['missing_headers'] !== []) {
             $this->validationMessage = __('Faltan columnas: :columns', [
-                'columns' => implode(', ', $parsed['missing_headers']),
+                'columns' => implode(', ', array_map($this->columnLabel(...), $parsed['missing_headers'])),
             ]);
+            $this->importSummary = [
+                'processed' => $parsed['summary']['processed'],
+                'successful' => 0,
+                'failed' => $parsed['summary']['processed'],
+            ];
+            $this->storeErrorReport($errorSpreadsheet, array_map(fn (string $header): array => [
+                'row' => 1,
+                'field' => $header,
+                'message' => __('Falta la columna :field.', ['field' => $this->columnLabel($header)]),
+            ], $parsed['missing_headers']));
             $this->addError('file', $this->validationMessage);
 
             return;
@@ -83,8 +105,18 @@ new #[Title('Importaciones')] class extends Component {
             return;
         }
 
+        if ($parsed['errors'] !== []) {
+            $this->importSummary = $parsed['summary'];
+            $this->storeErrorReport($errorSpreadsheet, $parsed['errors']);
+            $this->validationMessage = __('El archivo contiene filas con error.');
+            $this->addError('file', $this->validationMessage);
+
+            return;
+        }
+
         $this->parsedRows = $parsed['rows'];
         $this->detectedRows = count($parsed['rows']);
+        $this->importSummary = $parsed['summary'];
         $this->formatIsValid = true;
         $this->validationMessage = __('Formato validado.');
     }
@@ -138,6 +170,29 @@ new #[Title('Importaciones')] class extends Component {
         $this->validationMessage = '';
         $this->detectedRows = 0;
         $this->parsedRows = [];
+        $this->importSummary = [
+            'processed' => 0,
+            'successful' => 0,
+            'failed' => 0,
+        ];
+        $this->errorReportFilename = '';
+    }
+
+    /**
+     * @param  list<array{row: int, field: string, message: string}>  $errors
+     */
+    protected function storeErrorReport(RateImportErrorSpreadsheet $errorSpreadsheet, array $errors): void
+    {
+        $path = $errorSpreadsheet->create($this->importSummary, $errors, app()->getLocale());
+        $this->errorReportFilename = basename($path);
+    }
+
+    protected function columnLabel(string $key): string
+    {
+        $column = config("imports.pricing_template.columns.{$key}", []);
+        $translationKey = $column['translation_key'] ?? null;
+
+        return is_string($translationKey) ? __($translationKey) : $key;
     }
 
     /**
@@ -315,12 +370,22 @@ new #[Title('Importaciones')] class extends Component {
                         <flux:icon.check-circle class="size-5" />
                         <div>
                             <div class="font-medium">{{ $validationMessage }}</div>
-                            <div class="text-sm">{{ __(':count filas detectadas.', ['count' => $detectedRows]) }}</div>
+                            <div class="text-sm">{{ __(':count filas detectadas.', ['count' => format_number($detectedRows)]) }}</div>
                         </div>
                     </div>
                 @elseif ($validationMessage !== '')
-                    <div class="rounded-lg border border-red-200 bg-red-50 p-3 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200" data-test="import-invalid">
-                        {{ $validationMessage }}
+                    <div class="space-y-3 rounded-lg border border-red-200 bg-red-50 p-3 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200" data-test="import-invalid">
+                        <div class="font-medium">{{ $validationMessage }}</div>
+                        <div class="grid gap-2 text-sm md:grid-cols-3">
+                            <div>{{ __('Total de filas procesadas') }}: {{ format_number($importSummary['processed']) }}</div>
+                            <div>{{ __('Total de filas exitosas') }}: {{ format_number($importSummary['successful']) }}</div>
+                            <div>{{ __('Total de filas con error') }}: {{ format_number($importSummary['failed']) }}</div>
+                        </div>
+                        @if ($errorReportFilename !== '')
+                            <flux:button as="a" :href="route('portal.imports.errors', $errorReportFilename)" icon="arrow-down-tray" size="sm" data-test="import-errors-download">
+                                {{ __('Archivo de errores descargable') }}
+                            </flux:button>
+                        @endif
                     </div>
                 @endif
 
@@ -353,7 +418,7 @@ new #[Title('Importaciones')] class extends Component {
                         <div class="flex items-start justify-between gap-3">
                             <div class="min-w-0">
                                 <div class="truncate font-medium">{{ $import->original_filename }}</div>
-                                <flux:text class="text-sm">{{ $import->supplier?->code }} · {{ $import->created_at?->format('Y-m-d H:i') }}</flux:text>
+                                <flux:text class="text-sm">{{ $import->supplier?->code }} · {{ format_datetime($import->created_at) }}</flux:text>
                             </div>
                             <flux:badge color="zinc">{{ $import->status }}</flux:badge>
                         </div>
@@ -361,15 +426,15 @@ new #[Title('Importaciones')] class extends Component {
                         <div class="mt-2 grid grid-cols-3 gap-2 text-sm">
                             <div>
                                 <div class="text-zinc-500">{{ __('Total') }}</div>
-                                <div class="font-medium">{{ $import->total_rows }}</div>
+                                <div class="font-medium">{{ format_number($import->total_rows) }}</div>
                             </div>
                             <div>
                                 <div class="text-zinc-500">{{ __('Válidas') }}</div>
-                                <div class="font-medium">{{ $import->valid_rows }}</div>
+                                <div class="font-medium">{{ format_number($import->valid_rows) }}</div>
                             </div>
                             <div>
                                 <div class="text-zinc-500">{{ __('Inválidas') }}</div>
-                                <div class="font-medium">{{ $import->invalid_rows }}</div>
+                                <div class="font-medium">{{ format_number($import->invalid_rows) }}</div>
                             </div>
                         </div>
                     </div>

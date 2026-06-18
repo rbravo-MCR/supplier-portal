@@ -7,11 +7,11 @@
         <x-app-logo-icon class="h-16 max-h-16 w-44 max-w-full" />
 
         <span class="text-sm font-semibold leading-tight text-zinc-900 dark:text-white">
-            Supplier portal
+            {{ __('Supplier portal') }}
         </span>
     </a>
 @else
-    <flux:brand name="Supplier portal" {{ $attributes }}>
+    <flux:brand :name="__('Supplier portal')" {{ $attributes }}>
         <x-slot name="logo" class="flex h-10 w-40 items-center justify-center">
             <x-app-logo-icon class="max-h-10 w-40" />
         </x-slot>

@@ -38,6 +38,8 @@ new #[Title('Proveedores')] class extends Component {
 
     public string $phone = '';
 
+    public string $timezone = '';
+
     public string $search = '';
 
     public string $statusFilter = '';
@@ -110,6 +112,7 @@ new #[Title('Proveedores')] class extends Component {
             'contactName' => ['nullable', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255'],
             'phone' => ['nullable', 'string', 'max:255'],
+            'timezone' => ['nullable', 'string', Rule::in(timezone_identifiers_list())],
         ]);
 
         try {
@@ -120,6 +123,7 @@ new #[Title('Proveedores')] class extends Component {
                     countryId: $validated['countryId'],
                     integrationType: $validated['integrationType'],
                     status: $validated['status'],
+                    timezone: filled($validated['timezone']) ? $validated['timezone'] : null,
                     maxUsers: $validated['maxUsers'],
                     contactName: $validated['contactName'] ?: null,
                     email: $validated['email'] !== '' ? str($validated['email'])->lower()->toString() : null,
@@ -133,7 +137,7 @@ new #[Title('Proveedores')] class extends Component {
             return;
         }
 
-        $this->reset(['name', 'code', 'countryId', 'maxUsers', 'contactName', 'email', 'phone']);
+        $this->reset(['name', 'code', 'countryId', 'maxUsers', 'contactName', 'email', 'phone', 'timezone']);
         $this->integrationType = Supplier::IntegrationNone;
         $this->status = 'active';
         $this->resetPage();
@@ -155,6 +159,7 @@ new #[Title('Proveedores')] class extends Component {
             'integrationType.in' => __('Solo se pueden dar de alta proveedores sin API ni SOAP.'),
             'status.required' => __('Selecciona el estado del proveedor.'),
             'maxUsers.min' => __('El límite de usuarios debe ser mayor a cero.'),
+            'timezone.in' => __('Selecciona una zona horaria válida.'),
         ];
     }
 
@@ -272,6 +277,7 @@ new #[Title('Proveedores')] class extends Component {
                     </flux:select>
 
                     <flux:input wire:model="contactName" :label="__('Contacto')" placeholder="Operaciones" data-test="supplier-contact-name" />
+                    <flux:input wire:model="timezone" :label="__('Zona horaria')" placeholder="America/Merida" autocomplete="off" data-test="supplier-timezone" />
                     <flux:input wire:model="email" :label="__('Correo')" type="email" placeholder="ops@proveedor.com" data-test="supplier-email" />
                     <flux:input wire:model="phone" :label="__('Teléfono')" placeholder="+52 555 0100" data-test="supplier-phone" />
                 </div>
@@ -322,6 +328,7 @@ new #[Title('Proveedores')] class extends Component {
                 <flux:table.column>{{ __('Integración') }}</flux:table.column>
                 <flux:table.column>{{ __('Estado') }}</flux:table.column>
                 <flux:table.column>{{ __('Límite') }}</flux:table.column>
+                <flux:table.column>{{ __('Zona horaria') }}</flux:table.column>
                 <flux:table.column>{{ __('Contacto') }}</flux:table.column>
                 <flux:table.column>{{ __('Correo') }}</flux:table.column>
                 <flux:table.column>{{ __('Teléfono') }}</flux:table.column>
@@ -382,13 +389,14 @@ new #[Title('Proveedores')] class extends Component {
                             </div>
                         </flux:table.cell>
                         <flux:table.cell>{{ $supplier->max_users ?? __('Sin límite') }}</flux:table.cell>
+                        <flux:table.cell>{{ $supplier->timezone ?? '-' }}</flux:table.cell>
                         <flux:table.cell>{{ $supplier->contact_name ?? '-' }}</flux:table.cell>
                         <flux:table.cell>{{ $supplier->email ?? '-' }}</flux:table.cell>
                         <flux:table.cell>{{ $supplier->phone ?? '-' }}</flux:table.cell>
                     </flux:table.row>
                 @empty
                     <flux:table.row>
-                        <flux:table.cell colspan="9">
+                        <flux:table.cell colspan="10">
                             <div class="py-8 text-center">
                                 <flux:text>{{ __('No hay proveedores para los filtros seleccionados.') }}</flux:text>
                             </div>

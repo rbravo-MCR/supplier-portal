@@ -42,8 +42,8 @@ test('audit page shows outlet versus supplier booking comparison', function () {
         ->assertSee('Confirmada')
         ->assertDontSee('Cliente Pendiente')
         ->assertDontSee('Cliente Confirmado')
-        ->assertSee('05/06/2026 09:15')
-        ->assertSee('05/06/2026 12:30');
+        ->assertSee('05/06/2026 03:15')
+        ->assertSee('05/06/2026 06:30');
 });
 
 test('supplier user only sees own booking comparison', function () {

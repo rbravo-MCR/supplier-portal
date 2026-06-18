@@ -12,6 +12,11 @@ test('registration screen renders active supplier ids and uppercase names from t
     $response
         ->assertOk()
         ->assertSee('name="supplier_id"', false)
+        ->assertSee('name="preferred_locale"', false)
+        ->assertSee('Español')
+        ->assertSee('English')
+        ->assertSee('Português')
+        ->assertSee('Français')
         ->assertSee('font-medium text-zinc-950!', false)
         ->assertSee('[&>option]:text-zinc-950', false)
         ->assertSee('text-zinc-950!', false)
@@ -42,6 +47,7 @@ test('new users can register', function () {
         'name' => 'John Doe',
         'username' => 'jdoe',
         'email' => 'test@example.com',
+        'preferred_locale' => 'pt',
         'password' => 'password',
         'password_confirmation' => 'password',
     ]);
@@ -57,6 +63,7 @@ test('new users can register', function () {
         ->and($user->portalRole->code)->toBe('supplier_admin')
         ->and($user->supplier_id)->toBe($supplier->id)
         ->and($user->username)->toBe('jdoe')
+        ->and($user->preferred_locale)->toBe('pt')
         ->and($user->status)->toBe('inactive');
 });
 
@@ -68,6 +75,7 @@ test('new users can register without email', function () {
         'name' => 'Roberto Bravo',
         'username' => 'rbravo',
         'email' => '',
+        'preferred_locale' => 'es',
         'password' => 'password',
         'password_confirmation' => 'password',
     ]);
@@ -79,5 +87,6 @@ test('new users can register without email', function () {
 
     expect($user)->not->toBeNull()
         ->and($user->email)->toBeNull()
+        ->and($user->preferred_locale)->toBe('es')
         ->and($user->role)->toBe('supplier_admin');
 });

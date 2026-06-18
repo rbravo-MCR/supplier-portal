@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
@@ -49,6 +50,17 @@ class Booking extends Model
     public function actions(): HasMany
     {
         return $this->hasMany(BookingAction::class);
+    }
+
+    /**
+     * Get the promotions applied to this booking.
+     *
+     * @return BelongsToMany<Promotion, $this>
+     */
+    public function promotions(): BelongsToMany
+    {
+        return $this->belongsToMany(Promotion::class, 'booking_promotions')
+            ->withPivot(['original_amount', 'discount_amount', 'final_amount', 'applied_at']);
     }
 
     /**

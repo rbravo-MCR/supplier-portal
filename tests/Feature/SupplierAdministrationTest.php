@@ -41,6 +41,7 @@ test('super admin can create a supplier with configurable limits', function () {
             countryId: $country->id,
             integrationType: 'none',
             status: 'inactive',
+            timezone: 'America/New_York',
             maxUsers: 8,
             contactName: 'Jane Admin',
             email: 'ops@example.com',
@@ -52,6 +53,7 @@ test('super admin can create a supplier with configurable limits', function () {
     expect($supplier->uuid)->not->toBeEmpty()
         ->and($supplier->code)->toBe('ACME')
         ->and($supplier->max_users)->toBe(8)
+        ->and($supplier->timezone)->toBe('America/New_York')
         ->and($supplier->status)->toBe('inactive');
 
     $this->assertDatabaseHas('suppliers', [
@@ -59,6 +61,7 @@ test('super admin can create a supplier with configurable limits', function () {
         'name' => 'Acme Car Rentals',
         'code' => 'ACME',
         'country_id' => $country->id,
+        'timezone' => 'America/New_York',
         'integration_type' => 'none',
         'status' => 'inactive',
         'max_users' => 8,
@@ -87,6 +90,7 @@ test('supplier code must be unique', function () {
             countryId: $country->id,
             integrationType: 'none',
             status: 'active',
+            timezone: null,
             maxUsers: null,
             contactName: null,
             email: null,
@@ -107,6 +111,7 @@ test('supplier creation rejects mexican or integrated suppliers', function (stri
             countryId: $country->id,
             integrationType: $integrationType,
             status: 'active',
+            timezone: null,
             maxUsers: null,
             contactName: null,
             email: null,

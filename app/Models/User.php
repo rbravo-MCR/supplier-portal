@@ -4,7 +4,9 @@ namespace App\Models;
 
 use App\Actions\Teams\CreateTeam;
 use App\Concerns\HasTeams;
+use App\Support\SupportedLocale;
 use Database\Factories\UserFactory;
+use Illuminate\Contracts\Translation\HasLocalePreference;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Builder;
@@ -16,9 +18,9 @@ use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
-#[Fillable(['name', 'username', 'email', 'password', 'current_team_id', 'supplier_id', 'role_id', 'role', 'status'])]
+#[Fillable(['name', 'username', 'email', 'password', 'current_team_id', 'supplier_id', 'role_id', 'role', 'status', 'preferred_locale', 'timezone'])]
 #[Hidden(['password'])]
-class User extends Authenticatable
+class User extends Authenticatable implements HasLocalePreference
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasTeams, Notifiable;
@@ -140,6 +142,14 @@ class User extends Authenticatable
             ->take(2)
             ->map(fn ($word) => Str::substr($word, 0, 1))
             ->implode('');
+    }
+
+    /**
+     * Get the user's preferred locale.
+     */
+    public function preferredLocale(): string
+    {
+        return SupportedLocale::normalize($this->preferred_locale);
     }
 
     /**

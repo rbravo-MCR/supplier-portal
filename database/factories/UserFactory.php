@@ -32,6 +32,8 @@ class UserFactory extends Factory
             'password' => static::$password ??= Hash::make('password'),
             'role' => 'admin',
             'status' => 'active',
+            'preferred_locale' => 'es',
+            'timezone' => 'America/Merida',
             'supplier_id' => null,
         ];
     }

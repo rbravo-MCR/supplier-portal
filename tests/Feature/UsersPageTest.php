@@ -29,6 +29,53 @@ test('users page displays portal users', function () {
         ->assertSee('Administrador');
 });
 
+test('admin can see and filter users by preferred locale', function () {
+    $admin = User::factory()->create();
+
+    User::factory()->create([
+        'name' => 'English User',
+        'preferred_locale' => 'en',
+    ]);
+    User::factory()->create([
+        'name' => 'French User',
+        'preferred_locale' => 'fr',
+    ]);
+
+    Livewire::actingAs($admin)
+        ->test('pages::users')
+        ->assertSee('English')
+        ->assertSee('Français')
+        ->set('localeFilter', 'fr')
+        ->assertSee('French User')
+        ->assertDontSee('English User');
+});
+
+test('supplier users cannot filter into another supplier by preferred locale', function () {
+    $supplier = Supplier::factory()->create();
+    $otherSupplier = Supplier::factory()->create();
+    $supplierAdmin = User::factory()->create([
+        'supplier_id' => $supplier->id,
+        'role' => 'supplier_admin',
+    ]);
+
+    User::factory()->create([
+        'supplier_id' => $supplier->id,
+        'name' => 'Own Supplier User',
+        'preferred_locale' => 'es',
+    ]);
+    User::factory()->create([
+        'supplier_id' => $otherSupplier->id,
+        'name' => 'Other Supplier User',
+        'preferred_locale' => 'en',
+    ]);
+
+    Livewire::actingAs($supplierAdmin)
+        ->test('pages::users')
+        ->set('localeFilter', 'en')
+        ->assertSee('Own Supplier User')
+        ->assertDontSee('Other Supplier User');
+});
+
 test('users form creates a portal user', function () {
     $supplier = Supplier::factory()->create();
     $admin = User::factory()->create();
@@ -116,7 +163,7 @@ test('users form suggests three available usernames', function () {
         ->set('username', 'rbravo')
         ->assertSee('rbravo.26')
         ->assertSee('rbravo-01')
-        ->assertSee('rbravo-0615');
+        ->assertSee('rbravo-'.now()->format('md'));
 });
 
 test('users page reads active suppliers from cached array rows', function () {

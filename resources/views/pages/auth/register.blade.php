@@ -28,6 +28,20 @@
                 </flux:text>
             @endif
 
+            <flux:select
+                name="preferred_locale"
+                :label="__('Idioma')"
+                required
+                class="bg-white! font-medium text-zinc-950! [color-scheme:light] [&>option]:bg-white [&>option]:text-zinc-950"
+                data-test="register-preferred-locale"
+            >
+                @foreach ($locales as $localeCode => $localeLabel)
+                    <flux:select.option :value="$localeCode" :selected="old('preferred_locale', 'es') === $localeCode">
+                        {{ $localeLabel }}
+                    </flux:select.option>
+                @endforeach
+            </flux:select>
+
             <!-- Name -->
             <flux:input
                 name="name"

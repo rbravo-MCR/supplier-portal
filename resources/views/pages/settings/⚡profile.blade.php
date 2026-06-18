@@ -3,6 +3,7 @@
 use App\Concerns\ProfileValidationRules;
 use Flux\Flux;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
@@ -11,6 +12,7 @@ new #[Title('Profile settings')] class extends Component {
 
     public string $name = '';
     public ?string $email = null;
+    public ?string $timezone = null;
 
     /**
      * Mount the component.
@@ -19,6 +21,7 @@ new #[Title('Profile settings')] class extends Component {
     {
         $this->name = Auth::user()->name;
         $this->email = Auth::user()->email;
+        $this->timezone = Auth::user()->timezone;
     }
 
     /**
@@ -28,11 +31,15 @@ new #[Title('Profile settings')] class extends Component {
     {
         $user = Auth::user();
 
-        $validated = $this->validate($this->profileRules($user->id));
+        $validated = $this->validate([
+            ...$this->profileRules($user->id),
+            'timezone' => ['nullable', 'string', Rule::in(timezone_identifiers_list())],
+        ]);
 
         $user->fill([
             ...$validated,
             'email' => filled($validated['email'] ?? null) ? $validated['email'] : null,
+            'timezone' => filled($validated['timezone'] ?? null) ? $validated['timezone'] : null,
         ]);
 
         $user->save();
@@ -53,6 +60,8 @@ new #[Title('Profile settings')] class extends Component {
             <div>
                 <flux:input wire:model="email" :label="__('Email')" type="email" autocomplete="email" />
             </div>
+
+            <flux:input wire:model="timezone" :label="__('Zona horaria')" type="text" placeholder="America/Merida" autocomplete="off" />
 
             <div class="flex items-center gap-4">
                 <div class="flex items-center justify-end">

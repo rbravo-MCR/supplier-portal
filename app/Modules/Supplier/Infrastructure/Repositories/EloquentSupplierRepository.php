@@ -27,6 +27,7 @@ class EloquentSupplierRepository implements SupplierRepository
             'name' => $data->name,
             'code' => $normalizedCode,
             'country_id' => $data->countryId,
+            'timezone' => $data->timezone,
             'integration_type' => $data->integrationType,
             'status' => $data->status,
             'max_users' => $data->maxUsers,

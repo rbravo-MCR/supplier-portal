@@ -5,7 +5,9 @@ namespace App\Actions\Fortify;
 use App\Concerns\PasswordValidationRules;
 use App\Concerns\ProfileValidationRules;
 use App\Models\User;
+use App\Support\SupportedLocale;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Laravel\Fortify\Contracts\CreatesNewUsers;
 
 class CreateNewUser implements CreatesNewUsers
@@ -23,6 +25,7 @@ class CreateNewUser implements CreatesNewUsers
             ...$this->profileRules(),
             'supplier_id' => ['required', 'integer', 'exists:suppliers,id,status,active'],
             'username' => ['required', 'string', 'lowercase', 'alpha_dash:ascii', 'max:255', 'unique:users,username'],
+            'preferred_locale' => ['required', 'string', Rule::in(['es', 'en', 'pt', 'fr'])],
             'password' => $this->passwordRules(),
         ])->validate();
 
@@ -34,6 +37,7 @@ class CreateNewUser implements CreatesNewUsers
             'supplier_id' => $input['supplier_id'],
             'role' => 'supplier_admin',
             'status' => 'inactive',
+            'preferred_locale' => SupportedLocale::normalize($input['preferred_locale']),
         ]);
     }
 }

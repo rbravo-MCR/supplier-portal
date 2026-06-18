@@ -65,6 +65,7 @@ class CreateSupplier
                     'name' => $supplier->name,
                     'code' => $supplier->code,
                     'country_id' => $supplier->country_id,
+                    'timezone' => $supplier->timezone,
                     'integration_type' => $supplier->integration_type,
                     'status' => $supplier->status,
                     'max_users' => $supplier->max_users,

@@ -50,7 +50,7 @@ new #[Title('Precios')] class extends Component {
     public function mount(): void
     {
         $this->supplierId = Auth::user()->supplier_id;
-        $this->currencyId = Currency::query()->where('code', 'USD')->value('id');
+        $this->currencyId = $this->defaultCurrencyIdForSupplier($this->supplierId);
         $this->validFrom = now()->toDateString();
         $this->validTo = now()->addDays(30)->toDateString();
     }
@@ -68,6 +68,7 @@ new #[Title('Precios')] class extends Component {
     public function updatedSupplierId(): void
     {
         $this->reset(['officeCode', 'vehicleCategoryId', 'acrissCode']);
+        $this->currencyId = $this->defaultCurrencyIdForSupplier($this->supplierId);
     }
 
     public function updatedVehicleCategoryId(): void
@@ -337,6 +338,19 @@ new #[Title('Precios')] class extends Component {
             ->first();
     }
 
+    private function defaultCurrencyIdForSupplier(?int $supplierId): ?int
+    {
+        if ($supplierId === null) {
+            return null;
+        }
+
+        return Supplier::query()
+            ->whereKey($supplierId)
+            ->join('countries', 'suppliers.country_id', '=', 'countries.id')
+            ->whereNotNull('countries.currency_id')
+            ->value('countries.currency_id');
+    }
+
     /**
      * @return list<string>
      */
@@ -480,11 +494,10 @@ new #[Title('Precios')] class extends Component {
                         <flux:table.cell>{{ $rate->office_code }}</flux:table.cell>
                         <flux:table.cell>{{ $rate->rate_plan_code }}</flux:table.cell>
                         <flux:table.cell>{{ $rate->supplier?->code ?? '-' }}</flux:table.cell>
-                        <flux:table.cell>{{ $rate->valid_from->format('Y-m-d') }} / {{ $rate->valid_to->format('Y-m-d') }}
+                        <flux:table.cell>{{ format_date($rate->valid_from) }} / {{ format_date($rate->valid_to) }}
                         </flux:table.cell>
                         <flux:table.cell align="end">
-                            {{ $rate->currency?->symbol ?? $rate->currency?->code }}
-                            {{ number_format((float) $rate->base_price, $rate->currency?->decimal_places ?? 2) }}
+                            {{ format_money($rate->base_price, $rate->currency?->code, $rate->currency?->decimal_places ?? 2) }}
                         </flux:table.cell>
                     </flux:table.row>
                 @empty

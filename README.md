@@ -317,6 +317,59 @@ Rates are published from controlled catalogs instead of free-text values where o
 
 Supplier users only see and save data for their assigned supplier. Platform users must select the supplier before choosing supplier-dependent values such as offices, vehicle categories, and ACRISS codes.
 
+## Internationalization
+
+The portal supports four locales:
+
+- `es`: Español
+- `en`: English
+- `pt`: Português
+- `fr`: Français
+
+User language preference is stored in `users.preferred_locale` and applied on login and authenticated navigation. The current locale is also stored in session for the active request flow, but the database remains the source of truth.
+
+Locale changes are handled by:
+
+```text
+POST /settings/locale
+```
+
+The route requires authentication, CSRF protection, backend whitelist validation, and a basic rate limit. Only `es`, `en`, `pt`, and `fr` are accepted. Invalid or empty locales fall back safely to `es`.
+
+Regional metadata lives in `config/locales.php`, including display name, suggested country, date format, datetime format, timezone, default currency metadata, and text direction. Display helpers should be used for dates, datetimes, numbers, and money:
+
+```blade
+{{ format_date($date) }}
+{{ format_datetime($date) }}
+{{ format_number($value) }}
+{{ format_money($amount, $currency) }}
+```
+
+Do not infer business currency from language. Currency must come from supplier, country, tariff, or the relevant business context.
+
+Excel templates and import/export messages are localized. Templates are generated for:
+
+```text
+storage/app/templates/supplier-prices-es.xlsx
+storage/app/templates/supplier-prices-en.xlsx
+storage/app/templates/supplier-prices-pt.xlsx
+storage/app/templates/supplier-prices-fr.xlsx
+```
+
+Import processing uses stable internal column keys from `config/imports.php`; translated headers are presentation only.
+
+I18N quality checks:
+
+```bash
+php artisan i18n:audit
+php artisan i18n:missing
+php artisan test --compact tests/Feature/I18nQualityTest.php tests/Feature/LocalePreferenceTest.php tests/Feature/LocaleRegionalSupportTest.php
+```
+
+No new module should be approved with visible hardcoded text. All visible UI text must go through `lang/`.
+
+Full i18n documentation is available in [docs/I18N.md](docs/I18N.md).
+
 ## Vehicle Category Catalog
 
 The GPS category source file lives at:

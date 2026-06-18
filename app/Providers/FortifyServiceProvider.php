@@ -9,6 +9,7 @@ use App\Http\Responses\RegisterResponse;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Modules\Identity\Application\UseCases\CanAuthenticateUser;
+use App\Support\SupportedLocale;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -51,22 +52,23 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::authenticateUsing(function (Request $request): ?User {
             $username = Str::lower((string) $request->input(Fortify::username()));
 
-            $users = User::query()
-                ->with('supplier')
+            $user = User::query()
                 ->where('username', $username)
-                ->orderByRaw('supplier_id IS NULL')
-                ->get();
+                ->first();
 
-            foreach ($users as $user) {
-                if (
-                    Hash::check((string) $request->input('password'), $user->password)
-                    && app(CanAuthenticateUser::class)->handle($user)
-                ) {
-                    return $user;
-                }
+            if ($user === null) {
+                return null;
             }
 
-            return null;
+            if (! app(CanAuthenticateUser::class)->handle($user)) {
+                return null;
+            }
+
+            if (! Hash::check((string) $request->input('password'), $user->password)) {
+                return null;
+            }
+
+            return $user;
         });
     }
 
@@ -78,6 +80,7 @@ class FortifyServiceProvider extends ServiceProvider
         Fortify::loginView(fn () => view('pages::auth.login'));
         Fortify::confirmPasswordView(fn () => view('pages::auth.confirm-password'));
         Fortify::registerView(fn () => view('pages::auth.register', [
+            'locales' => SupportedLocale::options(),
             'suppliers' => Supplier::query()
                 ->select(['id', 'name', 'code'])
                 ->active()

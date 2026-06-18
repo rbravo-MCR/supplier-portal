@@ -32,6 +32,22 @@ new #[Title('Categorías')] class extends Component {
 
     public string $search = '';
 
+    public ?int $editingCategoryId = null;
+
+    public string $editSupplierCode = '';
+
+    public string $editAcrissCode = '';
+
+    public string $editDescription = '';
+
+    public string $editStatus = 'active';
+
+    public string $editCategoryLabel = '';
+
+    public ?int $editVehicleCategoryCatalogId = null;
+
+    public bool $showEditCategoryModal = false;
+
     public function mount(): void
     {
         $this->supplierId = Auth::user()->supplier_id;
@@ -106,6 +122,86 @@ new #[Title('Categorías')] class extends Component {
         Flux::toast(variant: 'success', text: __('Categoría creada.'));
     }
 
+    public function editCategory(int $categoryId): void
+    {
+        abort_unless($this->canManageCategories(), 403);
+
+        $category = $this->editableCategoryQuery()->findOrFail($categoryId);
+
+        $this->editingCategoryId = $category->id;
+        $this->editVehicleCategoryCatalogId = $category->vehicle_category_catalog_id;
+        $this->editCategoryLabel = ($category->catalog?->code ?? $category->code).' · '.($category->catalog?->name_es ?? $category->name);
+        $this->editSupplierCode = $category->supplier_code ?? '';
+        $this->editAcrissCode = $category->acriss_prefix ?? '';
+        $this->editDescription = $category->description ?? '';
+        $this->editStatus = $category->status;
+        $this->resetValidation();
+        $this->showEditCategoryModal = true;
+    }
+
+    public function updateCategory(): void
+    {
+        abort_unless($this->canManageCategories(), 403);
+
+        $category = $this->editableCategoryQuery()->findOrFail($this->editingCategoryId);
+        $acrissRules = ['nullable', 'string', 'max:4'];
+
+        if ($category->catalog?->acrissCodes()->exists()) {
+            $acrissRules = [
+                'required',
+                'string',
+                'max:4',
+                Rule::exists('vehicle_category_acriss_codes', 'code')
+                    ->where(fn ($query) => $query->where('vehicle_category_catalog_id', $category->vehicle_category_catalog_id)),
+            ];
+        }
+
+        $validated = $this->validate([
+            'editSupplierCode' => ['nullable', 'string', 'max:30'],
+            'editAcrissCode' => $acrissRules,
+            'editDescription' => ['nullable', 'string', 'max:500'],
+            'editStatus' => ['required', Rule::in(['active', 'inactive'])],
+        ]);
+
+        $category->update([
+            'supplier_code' => $validated['editSupplierCode'] !== ''
+                ? str($validated['editSupplierCode'])->upper()->toString()
+                : null,
+            'acriss_prefix' => $validated['editAcrissCode'] !== ''
+                ? str($validated['editAcrissCode'])->upper()->toString()
+                : null,
+            'description' => $validated['editDescription'] ?: null,
+            'status' => $validated['editStatus'],
+        ]);
+
+        $this->resetEditForm();
+        $this->resetPage();
+        $this->showEditCategoryModal = false;
+
+        Flux::toast(variant: 'success', text: __('Categoría actualizada.'));
+    }
+
+    public function deleteCategory(int $categoryId): void
+    {
+        abort_unless($this->canManageCategories(), 403);
+
+        $category = $this->editableCategoryQuery()->findOrFail($categoryId);
+
+        $category->update([
+            'status' => 'inactive',
+        ]);
+
+        $this->resetPage();
+
+        Flux::toast(variant: 'success', text: __('Categoría desactivada.'));
+    }
+
+    #[Computed]
+    public function canManageCategories(): bool
+    {
+        return (int) Auth::user()->role_id === 4;
+    }
+
     /**
      * @return Collection<int, Supplier>
      */
@@ -147,6 +243,22 @@ new #[Title('Categorías')] class extends Component {
             ->get(['id', 'vehicle_category_catalog_id', 'code']);
     }
 
+    /**
+     * @return Collection<int, VehicleCategoryAcrissCode>
+     */
+    #[Computed]
+    public function editAcrissCodes(): Collection
+    {
+        if (! $this->editVehicleCategoryCatalogId) {
+            return collect();
+        }
+
+        return VehicleCategoryAcrissCode::query()
+            ->where('vehicle_category_catalog_id', $this->editVehicleCategoryCatalogId)
+            ->orderBy('code')
+            ->get(['id', 'vehicle_category_catalog_id', 'code']);
+    }
+
     #[Computed]
     public function categories(): LengthAwarePaginator
     {
@@ -169,6 +281,26 @@ new #[Title('Categorías')] class extends Component {
             })
             ->orderBy('name')
             ->paginate(10);
+    }
+
+    private function editableCategoryQuery(): Builder
+    {
+        return VehicleCategory::query()
+            ->with(['catalog:id,code,name_es'])
+            ->forSupplier(Auth::user()->supplier_id);
+    }
+
+    private function resetEditForm(): void
+    {
+        $this->reset([
+            'editingCategoryId',
+            'editSupplierCode',
+            'editAcrissCode',
+            'editDescription',
+            'editCategoryLabel',
+            'editVehicleCategoryCatalogId',
+        ]);
+        $this->editStatus = 'active';
     }
 
     private function selectedCatalog(): ?VehicleCategoryCatalog
@@ -244,6 +376,55 @@ new #[Title('Categorías')] class extends Component {
         </div>
     </form>
 
+    @if ($this->canManageCategories)
+        <flux:modal wire:model="showEditCategoryModal" class="md:w-[42rem]">
+            <form wire:submit="updateCategory" class="space-y-6">
+                <div>
+                    <flux:heading size="lg">{{ __('Modificar categoría') }}</flux:heading>
+                    <flux:text class="mt-2">{{ $editCategoryLabel }}</flux:text>
+                </div>
+
+                <div class="grid gap-4 md:grid-cols-2">
+                    <flux:input wire:model="editSupplierCode" :label="__('Código proveedor')" placeholder="FULLSIZE_AUTO" maxlength="30" data-test="category-edit-supplier-code" />
+
+                    <flux:select
+                        wire:model.live="editAcrissCode"
+                        wire:key="category-edit-acriss-{{ $editVehicleCategoryCatalogId ?? 'none' }}"
+                        :label="__('Código ACRISS')"
+                        :disabled="$this->editAcrissCodes->isEmpty()"
+                        data-test="category-edit-acriss-code"
+                    >
+                        <flux:select.option value="">
+                            {{ $this->editAcrissCodes->isEmpty() ? __('Sin códigos ACRISS') : __('Selecciona ACRISS') }}
+                        </flux:select.option>
+                        @foreach ($this->editAcrissCodes as $acrissCodeOption)
+                            <flux:select.option :value="$acrissCodeOption->code" wire:key="category-edit-acriss-{{ $editVehicleCategoryCatalogId }}-{{ $acrissCodeOption->code }}">
+                                {{ $acrissCodeOption->code }}
+                            </flux:select.option>
+                        @endforeach
+                    </flux:select>
+
+                    <flux:select wire:model="editStatus" :label="__('Estado')" data-test="category-edit-status">
+                        <flux:select.option value="active">{{ __('Activo') }}</flux:select.option>
+                        <flux:select.option value="inactive">{{ __('Inactivo') }}</flux:select.option>
+                    </flux:select>
+                </div>
+
+                <flux:textarea wire:model="editDescription" :label="__('Descripción')" rows="3" placeholder="Vehículos familiares de capacidad media." data-test="category-edit-description" />
+
+                <div class="flex justify-end gap-2">
+                    <flux:modal.close>
+                        <flux:button type="button" variant="ghost">{{ __('Cancelar') }}</flux:button>
+                    </flux:modal.close>
+
+                    <flux:button type="submit" variant="primary" icon="check" wire:loading.attr="disabled" wire:target="updateCategory" data-test="category-edit-submit">
+                        {{ __('Guardar cambios') }}
+                    </flux:button>
+                </div>
+            </form>
+        </flux:modal>
+    @endif
+
     <div class="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
         <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
@@ -262,6 +443,9 @@ new #[Title('Categorías')] class extends Component {
                 <flux:table.column>{{ __('Proveedor') }}</flux:table.column>
                 <flux:table.column>{{ __('Estado') }}</flux:table.column>
                 <flux:table.column>{{ __('Descripción') }}</flux:table.column>
+                @if ($this->canManageCategories)
+                    <flux:table.column data-test="category-actions-header">{{ __('Acciones') }}</flux:table.column>
+                @endif
             </flux:table.columns>
 
             <flux:table.rows>
@@ -279,10 +463,38 @@ new #[Title('Categorías')] class extends Component {
                             </flux:badge>
                         </flux:table.cell>
                         <flux:table.cell>{{ $category->description ?? '-' }}</flux:table.cell>
+                        @if ($this->canManageCategories)
+                            <flux:table.cell>
+                                <div class="flex items-center gap-2">
+                                    <flux:button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        icon="pencil-square"
+                                        wire:click="editCategory({{ $category->id }})"
+                                        data-test="category-edit-{{ $category->id }}"
+                                    >
+                                        <span class="sr-only">{{ __('Editar') }}</span>
+                                    </flux:button>
+
+                                    <flux:button
+                                        type="button"
+                                        variant="danger"
+                                        size="sm"
+                                        icon="trash"
+                                        wire:click="deleteCategory({{ $category->id }})"
+                                        wire:confirm="{{ __('Esta acción desactivará la categoría. ¿Continuar?') }}"
+                                        data-test="category-delete-{{ $category->id }}"
+                                    >
+                                        <span class="sr-only">{{ __('Borrar') }}</span>
+                                    </flux:button>
+                                </div>
+                            </flux:table.cell>
+                        @endif
                     </flux:table.row>
                 @empty
                     <flux:table.row>
-                        <flux:table.cell colspan="6">
+                        <flux:table.cell :colspan="$this->canManageCategories ? 7 : 6">
                             <div class="py-8 text-center">
                                 <flux:text>{{ __('Aún no hay categorías registradas.') }}</flux:text>
                             </div>

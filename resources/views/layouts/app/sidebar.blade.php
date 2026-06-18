@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" class="dark">
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}" dir="{{ locale_service()->localeConfig()['direction'] ?? 'ltr' }}" class="dark">
     <head>
         @include('partials.head')
         <style>
@@ -25,6 +25,8 @@
         $dashboardHref = route($dashboardRouteName);
         $dashboardIsCurrent = request()->routeIs('dashboard', 'supplier.dashboard', 'admin.dashboard');
         $isPlatformUser = $user?->supplier_id === null;
+        $locales = \App\Support\SupportedLocale::options();
+        $currentLocale = \App\Support\SupportedLocale::normalize($user?->preferred_locale ?? session('locale'));
     @endphp
 
     <body class="min-h-screen bg-white dark:bg-zinc-800">
@@ -46,6 +48,9 @@
                     </flux:sidebar.item>
                     <flux:sidebar.item icon="currency-dollar" :href="route('portal.prices')" :current="request()->routeIs('portal.prices')" wire:navigate>
                         {{ __('Precios') }}
+                    </flux:sidebar.item>
+                    <flux:sidebar.item icon="tag" :href="route('portal.promotions')" :current="request()->routeIs('portal.promotions')" wire:navigate>
+                        {{ __('Promociones') }}
                     </flux:sidebar.item>
                     <flux:sidebar.item icon="arrow-up-tray" :href="route('portal.imports')" :current="request()->routeIs('portal.imports')" wire:navigate>
                         {{ __('Importaciones') }}
@@ -115,6 +120,21 @@
                             </div>
                         </div>
                     </flux:menu.radio.group>
+
+                    <flux:menu.separator />
+
+                    <div class="px-1 py-1.5">
+                        <form method="POST" action="{{ route('locale.update') }}">
+                            @csrf
+                            <flux:select name="locale" :label="__('Idioma')" x-on:change="$event.target.form.submit()" data-test="mobile-user-locale-select">
+                                @foreach ($locales as $localeCode => $localeLabel)
+                                    <flux:select.option :value="$localeCode" :selected="$currentLocale === $localeCode">
+                                        {{ $localeLabel }}
+                                    </flux:select.option>
+                                @endforeach
+                            </flux:select>
+                        </form>
+                    </div>
 
                     <flux:menu.separator />
 

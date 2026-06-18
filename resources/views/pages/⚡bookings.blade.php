@@ -181,16 +181,16 @@ new #[Title('Reservas')] class extends Component {
                         <flux:table.cell>
                             <div class="flex flex-col">
                                 <span>{{ $booking->pickup_office_code }}</span>
-                                <span class="text-xs text-zinc-500 dark:text-zinc-400">{{ $booking->pickup_at->format('d/m/Y H:i') }}</span>
+                                <span class="text-xs text-zinc-500 dark:text-zinc-400">{{ format_datetime($booking->pickup_at) }}</span>
                             </div>
                         </flux:table.cell>
                         <flux:table.cell>
                             <div class="flex flex-col">
                                 <span>{{ $booking->dropoff_office_code }}</span>
-                                <span class="text-xs text-zinc-500 dark:text-zinc-400">{{ $booking->dropoff_at->format('d/m/Y H:i') }}</span>
+                                <span class="text-xs text-zinc-500 dark:text-zinc-400">{{ format_datetime($booking->dropoff_at) }}</span>
                             </div>
                         </flux:table.cell>
-                        <flux:table.cell>{{ $booking->currency }} {{ number_format((float) $booking->total_amount, 2) }}</flux:table.cell>
+                        <flux:table.cell>{{ format_money($booking->total_amount, $booking->currency) }}</flux:table.cell>
                         <flux:table.cell>
                             <flux:input
                                 wire:model="reservationCodes.{{ $booking->id }}"

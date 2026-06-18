@@ -73,17 +73,17 @@ new #[Title('Auditoría')] class extends Component {
     <div class="grid gap-4 md:grid-cols-3">
         <div class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
             <flux:text>{{ __('Reservas Outlet') }}</flux:text>
-            <div class="mt-2 text-3xl font-semibold text-zinc-900 dark:text-white">{{ $this->totals['outlet_total'] }}</div>
+            <div class="mt-2 text-3xl font-semibold text-zinc-900 dark:text-white">{{ format_number($this->totals['outlet_total']) }}</div>
         </div>
 
         <div class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
             <flux:text>{{ __('Pendientes supplier') }}</flux:text>
-            <div class="mt-2 text-3xl font-semibold text-amber-600 dark:text-amber-400">{{ $this->totals['supplier_pending'] }}</div>
+            <div class="mt-2 text-3xl font-semibold text-amber-600 dark:text-amber-400">{{ format_number($this->totals['supplier_pending']) }}</div>
         </div>
 
         <div class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
             <flux:text>{{ __('Confirmadas supplier') }}</flux:text>
-            <div class="mt-2 text-3xl font-semibold text-emerald-600 dark:text-emerald-400">{{ $this->totals['supplier_confirmed'] }}</div>
+            <div class="mt-2 text-3xl font-semibold text-emerald-600 dark:text-emerald-400">{{ format_number($this->totals['supplier_confirmed']) }}</div>
         </div>
     </div>
 
@@ -112,7 +112,7 @@ new #[Title('Auditoría')] class extends Component {
                         <flux:table.cell>
                             {{ $booking->status === 'confirmed' ? $booking->reservation_code : __('Falta número reserva') }}
                         </flux:table.cell>
-                        <flux:table.cell>{{ $booking->created_at?->format('d/m/Y H:i') ?? '-' }}</flux:table.cell>
+                        <flux:table.cell>{{ format_datetime($booking->created_at) }}</flux:table.cell>
                         <flux:table.cell>
                             <flux:badge :color="$booking->status === 'confirmed' ? 'green' : 'amber'">
                                 {{ $booking->status === 'confirmed' ? __('Confirmada') : __('Pendiente') }}
