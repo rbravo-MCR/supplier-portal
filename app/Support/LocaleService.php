@@ -75,7 +75,6 @@ class LocaleService
     public function formatDate(mixed $date): string
     {
         return $this->carbon($date)
-            ?->timezone($this->getTimezone())
             ->format($this->getDateFormat()) ?? '-';
     }
 

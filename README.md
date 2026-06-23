@@ -1,8 +1,8 @@
 # Supplier Portal
 
-Supplier Portal is a Laravel application for vehicle rental suppliers that manage pricing, availability, inventory, bookings, reports, and users without direct API or SOAP integrations.
+Supplier Portal is a Laravel application for vehicle rental suppliers that manage pricing, availability, inventory, bookings, promotions, reports, and users without direct API or SOAP integrations.
 
-The platform centralizes manual supplier operations, Excel-based uploads, traceability, access control, and future integration readiness.
+The platform centralizes manual supplier operations, Excel-based uploads, traceability, access control, localized templates, and production readiness for future integrations.
 
 ## Stack
 
@@ -12,15 +12,31 @@ The platform centralizes manual supplier operations, Excel-based uploads, tracea
 - Flux UI 2
 - Filament 5
 - Fortify
-- Pest 4
+- Pest 4 / PHPUnit 12
 - Tailwind CSS 4
-- Vite
-- Node.js 22
-- PostgreSQL with `pg_trgm` and `unaccent` for location catalog search
+- Vite 8
+- Node.js 22 or newer for frontend tooling
+- PostgreSQL in production, with `pg_trgm` and `unaccent` for location catalog search
+
+## Requirements
+
+Local development needs:
+
+- PHP with the extensions required by Laravel and the selected database driver.
+- Composer.
+- Node.js 22+ and npm.
+- A configured database. The default `.env.example` uses SQLite, while production targets PostgreSQL.
+
+For PostgreSQL deployments, enable the extensions used by the location catalog migrations:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+CREATE EXTENSION IF NOT EXISTS unaccent;
+```
 
 ## Setup
 
-Install dependencies and prepare the app:
+Install dependencies and prepare the app manually:
 
 ```bash
 composer install
@@ -31,13 +47,31 @@ php artisan migrate
 npm run build
 ```
 
-Or use the Composer setup script:
+Or run the Composer setup script, which performs the same bootstrap flow:
 
 ```bash
 composer run setup
 ```
 
-Node.js 22 is the supported runtime for frontend tooling.
+`.env.example` is production-oriented. For local development, set at least:
+
+```env
+APP_ENV=local
+APP_DEBUG=true
+APP_URL=http://127.0.0.1:8000
+SESSION_ENCRYPT=false
+SESSION_SECURE_COOKIE=false
+```
+
+Testing uses in-memory SQLite from `phpunit.xml`. The application runtime uses the configured `DB_CONNECTION`.
+
+Seed the base catalogs and default test user:
+
+```bash
+php artisan db:seed
+```
+
+The base seeders create currencies, portal roles, and a default user record. Supplier-specific demo data is intentionally separate from the core setup.
 
 ## Development
 
@@ -53,24 +87,61 @@ Run only Vite:
 npm run dev
 ```
 
-## Testing
-
-Run the test suite:
+Build production assets:
 
 ```bash
-php artisan test
+npm run build
+```
+
+If frontend changes do not appear, rebuild assets or keep Vite running.
+
+Useful application entry points:
+
+```text
+/                 # redirects authenticated users by role
+/admin            # platform dashboard
+/supplier         # supplier dashboard
+/bookings
+/prices
+/promotions
+/imports
+/offices
+/availabilities
+/categories
+/audit
+/status           # authenticated portal status page
+/settings/profile
+/settings/appearance
+/settings/security
+/settings/teams
+```
+
+## Testing
+
+Run the full project check:
+
+```bash
+composer run ci:check
+```
+
+This clears config, checks Pint formatting, runs the i18n audit, and executes the Pest suite through the Composer `test` script.
+
+Run only the test suite:
+
+```bash
+php artisan test --compact
+```
+
+Run a focused test file:
+
+```bash
+php artisan test --compact tests/Feature/Api/CalculatePromotionTest.php
 ```
 
 Run formatter:
 
 ```bash
 vendor/bin/pint --format agent
-```
-
-Run the Composer CI check:
-
-```bash
-composer run ci:check
 ```
 
 ## Production Deployment
@@ -85,6 +156,7 @@ CACHE_STORE=failover
 QUEUE_CONNECTION=database
 SESSION_ENCRYPT=true
 SESSION_SECURE_COOKIE=true
+HEALTH_SECRET=change-me
 ```
 
 Recommended deployment sequence:
@@ -104,23 +176,29 @@ Production readiness checks:
 composer audit --format=plain
 npm audit --omit=dev --audit-level=moderate
 php artisan test --compact
+php artisan system:health-check
+php artisan system:service-level-check
+php artisan system:disaster-recovery-check
 ```
 
-Current production validation status:
+Production validation checklist:
 
 - Laravel migrations apply cleanly.
-- Full Pest suite passes with one intentionally skipped test.
+- Pest suite passes with the expected skips only.
 - Production frontend build completes.
 - Runtime npm audit is clean with `--omit=dev`.
 - Composer audit reports no known advisories.
+- Health, service-level, and disaster-recovery checks are green for the target environment.
 
-## Supplier Service API
+## JSON APIs
 
-Two JSON endpoints receive push data from the external supplier service. Requests are throttled at 120 per minute.
+JSON API routes are throttled at 120 requests per minute.
 
-**Create or update a booking:**
+### Supplier Service
 
-```
+Create or update a booking:
+
+```text
 POST /api/supplier-service/bookings
 ```
 
@@ -128,7 +206,7 @@ POST /api/supplier-service/bookings
 {
   "supplier_code": "AGA",
   "reservation_code": "RES-001",
-  "customer_name": "Juan Pérez",
+  "customer_name": "Juan Perez",
   "vehicle_class": "ECAR",
   "pickup_office_code": "GDLMX01",
   "dropoff_office_code": "GDLMX01",
@@ -139,11 +217,11 @@ POST /api/supplier-service/bookings
 }
 ```
 
-Returns `201` on creation, `200` on update. The `reservation_code` is the idempotency key per supplier.
+Returns `201` on creation and `200` on update. The `reservation_code` is the idempotency key per supplier.
 
-**Upsert vehicle availability (batch up to 500 items):**
+Upsert vehicle availability, with a batch size up to 500 items:
 
-```
+```text
 POST /api/supplier-service/vehicle-availability
 ```
 
@@ -164,66 +242,65 @@ POST /api/supplier-service/vehicle-availability
 }
 ```
 
-Each item can use `office_code` or `iata_code` (not both). Location type is inferred automatically.
+Each item can use `office_code` or `iata_code`, but not both. Location type is inferred automatically.
 
-## Observability
+### Promotion Calculation
 
-Health check endpoints expose system component status. They are protected by `HEALTH_SECRET` when configured:
+The quote flow can calculate applicable supplier promotions before booking persistence:
 
-```
-GET /health           # aggregate status
-GET /health/db
-GET /health/redis
-GET /health/queue
-GET /health/storage
-GET /health/outbox
-GET /health/failed-jobs
+```text
+POST /api/promotions/calculate
 ```
 
-Set `HEALTH_SECRET` in `.env` to require a bearer token from monitoring tools:
-
+```json
+{
+  "supplier_code": "AGA",
+  "office_code": "CUN01",
+  "acriss_code": "ECAR",
+  "pickup_at": "2026-07-01T10:00:00Z",
+  "dropoff_at": "2026-07-10T10:00:00Z",
+  "base_amount": 1000.00,
+  "currency": "USD"
+}
 ```
-Authorization: Bearer <secret>
+
+Example response:
+
+```json
+{
+  "original_amount": 1000.00,
+  "applicable_promotions": [
+    {
+      "promotion_id": "promotion-uuid",
+      "name": "Verano 2026",
+      "type": "seasonal",
+      "discount_amount": 150.00,
+      "discount_percentage": 15.00
+    }
+  ],
+  "total_discount": 150.00,
+  "final_amount": 850.00,
+  "currency": "USD",
+  "rental_days": 9
+}
 ```
 
-or:
-
-```
-X-Health-Secret: <secret>
-```
-
-When `HEALTH_SECRET` is empty, the endpoints are public (suitable for load balancer probes that already use `/up`).
-
-The internal portal status page at `/status` is always auth-protected.
-
-## Resilience
-
-**Database circuit breaker** protects both web and API routes. When the primary database is unavailable:
-
-- Requests return `503` with `{"message": "...", "incident_id": "INC-..."}`.
-- The circuit opens after `APP_DB_CIRCUIT_BREAKER_FAILURE_THRESHOLD` failures and remains open for `APP_DB_CIRCUIT_BREAKER_OPEN_SECONDS` seconds.
-- Runbook commands: `php artisan system:database-circuit-reset`, `php artisan system:database-circuit-probe`.
-
-**Connection timeout** is controlled by `DB_CONNECT_TIMEOUT` (default 5 seconds). This prevents connection hangs from consuming the full PHP execution window before the circuit breaker can respond.
-
-**Error handling** — all unhandled exceptions in production return `503` with a safe incident message. No stack traces, internal paths, or exception details are exposed. Debug mode shows full details only in non-production environments.
+Seasonal and volume promotions are evaluated independently. When multiple promotions of the same type overlap, the highest discount candidate is selected for that type.
 
 ## Authentication
 
 Access is handled by Laravel Fortify with username and password authentication.
 
-The login form accepts only:
+The login form accepts:
 
-- `Usuario`: the account username.
-- `Contraseña`: the account password.
+- `Usuario`: account username.
+- `Contrasena`: account password.
 
 The registration form requires selecting an active supplier. New registered accounts are related to that supplier and are redirected to the supplier dashboard after login.
 
 Platform administrators do not belong to a supplier and are redirected to the platform dashboard after login.
 
-Two-factor authentication and passkeys have been removed from the application and database schema.
-
-Email verification and remember-me authentication are not used. The `users` table does not include `email_verified_at` or `remember_token`.
+Two-factor authentication and passkeys have been removed from the application and database schema. Email verification and remember-me authentication are not used.
 
 ## Access Control
 
@@ -234,20 +311,6 @@ The application distinguishes platform users from supplier-scoped users through 
 - Login does not require selecting a supplier. The authenticated user determines the platform or supplier context.
 - Supplier-scoped users cannot access the suppliers directory, even if their role is `admin`.
 - The sidebar only shows `Proveedores` to platform users.
-
-Supplier-scoped pages automatically use the authenticated user's supplier. Platform users can select a supplier where the workflow requires it.
-
-## Supplier Eligibility
-
-The portal is intended for rental suppliers that operate outside Mexico and do not have API or SOAP integration.
-
-Supplier creation enforces:
-
-- The supplier fiscal country must be active and outside Mexico.
-- The supplier integration type must be `none`.
-- Suppliers with API or SOAP integrations must not be registered for manual portal operation.
-
-Supplier registration for users only lists active suppliers that satisfy those rules.
 
 Portal roles are stored in the `roles` table and linked from `users.role_id`. The legacy `users.role` code is still maintained for policy compatibility.
 
@@ -261,52 +324,21 @@ Seeded role codes:
 - `supplier_pricing`
 - `supplier_user`
 
-## Location Catalog Search
+## Supplier Eligibility
 
-Country, city, and zone lookups use the database-backed search scopes in the Eloquent models.
+The portal is intended for rental suppliers that operate outside Mexico and do not have API or SOAP integration.
 
-The location catalog is imported from the Fenix database:
+Supplier creation enforces:
 
-- `api_paises` -> `countries`
-- `api_destinos` -> `cities`
-- `api_zonas` -> `zones`
+- The supplier fiscal country must be active and outside Mexico.
+- The supplier integration type must be `none`.
+- Suppliers with API or SOAP integrations must not be registered for manual portal operation.
 
-Countries store ISO2 and ISO3 codes when available. Cities are linked to countries by ISO2, and zones are linked to cities by destination code.
+Supplier registration for users only lists active suppliers that satisfy those rules.
 
-Countries can optionally reference a currency through `countries.currency_id`. The relationship is nullable so the location catalog can grow before every country has a configured currency.
+## Workflows
 
-On PostgreSQL, migrations enable:
-
-- `pg_trgm`
-- `unaccent`
-- trigram GIN indexes for `countries.name`, `cities.name`, and `zones.name`
-
-This makes partial searches fast and accent-insensitive, so searches such as `Mexico` can match `México`, and `Cancun` can match `Cancún`.
-
-The offices page uses native Livewire/Flux selects for dependent location selection:
-
-- Selecting a country loads only its cities.
-- Selecting a city loads only its zones.
-- Office country selection is open to any country in `countries`; the outside-Mexico restriction applies only to supplier creation.
-
-## Currency Catalog
-
-The `currencies` master catalog stores ISO 4217 currency metadata:
-
-- `code`: unique 3-letter ISO code such as `USD`, `MXN`, or `EUR`.
-- `numeric_code`: 3-digit ISO numeric code.
-- `name`: official currency name.
-- `symbol`: visual display symbol.
-- `decimal_places`: ISO minor units, including 0-decimal currencies such as `JPY`, `KRW`, and `CLP`.
-- `is_active`: disables selection without deleting historical data.
-
-`CurrencySeeder` loads the initial operating catalog for major supplier markets. It is idempotent and can be rerun as the catalog grows.
-
-Tariffs use `rates.currency_id`; the old free-text `rates.currency` column is removed by migration. Backend workflows may receive ISO codes, but persistence resolves them to `currency_id`. Frontend displays use `symbol + amount`, while payment and integration logic should use the related currency `code`.
-
-Prices are stored as captured by the supplier. Currency conversion is not applied when saving rates; conversion belongs in query/search workflows using exchange rates.
-
-## Pricing Workflow
+### Pricing
 
 Rates are published from controlled catalogs instead of free-text values where operational catalogs already exist:
 
@@ -317,16 +349,89 @@ Rates are published from controlled catalogs instead of free-text values where o
 
 Supplier users only see and save data for their assigned supplier. Platform users must select the supplier before choosing supplier-dependent values such as offices, vehicle categories, and ACRISS codes.
 
+### Promotions
+
+Promotions support supplier-scoped seasonal and volume discounts:
+
+- Seasonal promotions apply within a configured date range.
+- Volume promotions apply by rental-day tiers.
+- Promotions can apply to all offices/categories or be limited to selected catalogs.
+- The `/promotions` page is available to supplier users with the expected permissions.
+- The `/api/promotions/calculate` endpoint returns the calculated discount breakdown for quote flows.
+
+### Imports
+
+Excel price imports follow the staging workflow:
+
+```text
+Excel -> validation -> staging -> approval -> publication
+```
+
+The import process uses stable internal column keys from `config/imports.php`; translated headers are presentation only. Error workbooks are generated for rows that cannot be imported.
+
+Localized templates are generated for supported locales under:
+
+```text
+storage/app/templates/supplier-prices-{locale}.xlsx
+```
+
+### Location Catalog
+
+Country, city, and zone lookups use database-backed search scopes in the Eloquent models.
+
+The location catalog is imported from the Fenix database:
+
+- `api_paises` -> `countries`
+- `api_destinos` -> `cities`
+- `api_zonas` -> `zones`
+
+On PostgreSQL, migrations enable:
+
+- `pg_trgm`
+- `unaccent`
+- trigram GIN indexes for `countries.name`, `cities.name`, and `zones.name`
+
+This makes partial searches fast and accent-insensitive.
+
+Import Fenix locations:
+
+```bash
+php artisan catalog:import-fenix-locations
+```
+
+Apply migrations and import the GPS vehicle category catalog:
+
+```bash
+php artisan migrate
+php artisan catalog:import-gps-vehicle-categories
+```
+
+Validate the GPS import without writing data:
+
+```bash
+php artisan catalog:import-gps-vehicle-categories --dry-run
+```
+
+## Currency Catalog
+
+The `currencies` master catalog stores ISO 4217 currency metadata:
+
+- `code`: unique 3-letter ISO code such as `USD`, `MXN`, or `EUR`.
+- `numeric_code`: 3-digit ISO numeric code.
+- `name`: official currency name.
+- `symbol`: visual display symbol.
+- `decimal_places`: ISO minor units.
+- `is_active`: disables selection without deleting historical data.
+
+`CurrencySeeder` loads the initial operating catalog for major supplier markets. It is idempotent and can be rerun as the catalog grows.
+
+Tariffs use `rates.currency_id`; the old free-text `rates.currency` column is removed by migration. Backend workflows may receive ISO codes, but persistence resolves them to `currency_id`.
+
+Prices are stored as captured by the supplier. Currency conversion is not applied when saving rates.
+
 ## Internationalization
 
-The portal supports four locales:
-
-- `es`: Español
-- `en`: English
-- `pt`: Português
-- `fr`: Français
-
-User language preference is stored in `users.preferred_locale` and applied on login and authenticated navigation. The current locale is also stored in session for the active request flow, but the database remains the source of truth.
+The portal supports localized UI, Excel templates, and import/export messages. Locale preference is stored in `users.preferred_locale` and applied on login and authenticated navigation.
 
 Locale changes are handled by:
 
@@ -334,9 +439,11 @@ Locale changes are handled by:
 POST /settings/locale
 ```
 
-The route requires authentication, CSRF protection, backend whitelist validation, and a basic rate limit. Only `es`, `en`, `pt`, and `fr` are accepted. Invalid or empty locales fall back safely to `es`.
+The route requires authentication, CSRF protection, backend whitelist validation, and a basic rate limit. Invalid or empty locales fall back safely to the default locale.
 
-Regional metadata lives in `config/locales.php`, including display name, suggested country, date format, datetime format, timezone, default currency metadata, and text direction. Display helpers should be used for dates, datetimes, numbers, and money:
+Regional metadata lives in `config/locales.php`, including display name, suggested country, date format, datetime format, timezone, default currency metadata, and text direction.
+
+Use display helpers for dates, datetimes, numbers, and money:
 
 ```blade
 {{ format_date($date) }}
@@ -346,17 +453,6 @@ Regional metadata lives in `config/locales.php`, including display name, suggest
 ```
 
 Do not infer business currency from language. Currency must come from supplier, country, tariff, or the relevant business context.
-
-Excel templates and import/export messages are localized. Templates are generated for:
-
-```text
-storage/app/templates/supplier-prices-es.xlsx
-storage/app/templates/supplier-prices-en.xlsx
-storage/app/templates/supplier-prices-pt.xlsx
-storage/app/templates/supplier-prices-fr.xlsx
-```
-
-Import processing uses stable internal column keys from `config/imports.php`; translated headers are presentation only.
 
 I18N quality checks:
 
@@ -370,26 +466,55 @@ No new module should be approved with visible hardcoded text. All visible UI tex
 
 Full i18n documentation is available in [docs/I18N.md](docs/I18N.md).
 
-## Vehicle Category Catalog
+## Observability
 
-The GPS category source file lives at:
+Health check endpoints expose system component status. They are protected by `HEALTH_SECRET` when configured:
 
 ```text
-docs/gps_categorias.csv
+GET /health
+GET /health/db
+GET /health/redis
+GET /health/queue
+GET /health/storage
+GET /health/outbox
+GET /health/failed-jobs
 ```
 
-Apply migrations and import the master vehicle category catalog:
+Set `HEALTH_SECRET` in `.env` to require a bearer token from monitoring tools:
+
+```text
+Authorization: Bearer <secret>
+```
+
+or:
+
+```text
+X-Health-Secret: <secret>
+```
+
+When `HEALTH_SECRET` is empty, the endpoints are public. The internal portal status page at `/status` is always auth-protected.
+
+## Resilience
+
+Database circuit breaker protects both web and API routes. When the primary database is unavailable:
+
+- Requests return `503` with a safe incident message and `incident_id`.
+- The circuit opens after `APP_DB_CIRCUIT_BREAKER_FAILURE_THRESHOLD` failures.
+- The circuit remains open for `APP_DB_CIRCUIT_BREAKER_OPEN_SECONDS` seconds.
+
+Runbook commands:
 
 ```bash
-php artisan migrate
-php artisan catalog:import-gps-vehicle-categories
+php artisan system:database-circuit-reset
+php artisan system:database-circuit-probe
+php artisan system:health-check
+php artisan system:service-level-check
+php artisan system:disaster-recovery-check
 ```
 
-Validate the import without writing data:
+Connection timeout is controlled by `DB_CONNECT_TIMEOUT`, defaulting to 5 seconds for PostgreSQL.
 
-```bash
-php artisan catalog:import-gps-vehicle-categories --dry-run
-```
+Unhandled exceptions in production return a safe incident message. Debug mode shows full details only in non-production environments.
 
 ## Documentation
 
@@ -400,6 +525,7 @@ Detailed product and engineering documentation is in `docs/`:
 - [Data Model](docs/06_DATA_MODEL.md)
 - [Permission Matrix](docs/07_PERMISSION_MATRIX.md)
 - [Runbook](docs/16_RUNBOOK.md)
+- [I18N](docs/I18N.md)
 
 ## Repository
 

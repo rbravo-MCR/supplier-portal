@@ -7,7 +7,7 @@ use App\Modules\Supplier\Application\DTOs\CreateSupplierData;
 use App\Modules\Supplier\Application\UseCases\CreateSupplier;
 use App\Modules\Supplier\Domain\Exceptions\SupplierCodeAlreadyExists;
 use Flux\Flux;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
@@ -184,7 +184,7 @@ new #[Title('Proveedores')] class extends Component {
     }
 
     #[Computed]
-    public function suppliers(): LengthAwarePaginator
+    public function suppliers(): Paginator
     {
         return Supplier::query()
             ->with('country:id,name,iso2')
@@ -195,7 +195,7 @@ new #[Title('Proveedores')] class extends Component {
                 $query->where('status', $this->statusFilter);
             })
             ->orderBy('name')
-            ->paginate(15);
+            ->simplePaginate(15);
     }
 };
 ?>

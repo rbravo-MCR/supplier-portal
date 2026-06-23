@@ -25,8 +25,6 @@
         $dashboardHref = route($dashboardRouteName);
         $dashboardIsCurrent = request()->routeIs('dashboard', 'supplier.dashboard', 'admin.dashboard');
         $isPlatformUser = $user?->supplier_id === null;
-        $locales = \App\Support\SupportedLocale::options();
-        $currentLocale = \App\Support\SupportedLocale::normalize($user?->preferred_locale ?? session('locale'));
     @endphp
 
     <body class="min-h-screen bg-white dark:bg-zinc-800">
@@ -87,6 +85,10 @@
                 </flux:sidebar.group>
             </flux:sidebar.nav>
 
+            <div class="in-data-flux-sidebar-collapsed-desktop:hidden px-3 py-3">
+                <x-locale-selector data-test="sidebar-locale-select" />
+            </div>
+
             <flux:spacer />
 
             <x-desktop-user-menu class="hidden lg:block" :name="auth()->user()->name" />
@@ -97,6 +99,8 @@
             <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" />
 
             <flux:spacer />
+
+            <x-locale-selector class="w-44" :show-label="false" data-test="mobile-header-locale-select" />
 
             <flux:dropdown position="top" align="end">
                 <flux:profile
@@ -120,21 +124,6 @@
                             </div>
                         </div>
                     </flux:menu.radio.group>
-
-                    <flux:menu.separator />
-
-                    <div class="px-1 py-1.5">
-                        <form method="POST" action="{{ route('locale.update') }}">
-                            @csrf
-                            <flux:select name="locale" :label="__('Idioma')" x-on:change="$event.target.form.submit()" data-test="mobile-user-locale-select">
-                                @foreach ($locales as $localeCode => $localeLabel)
-                                    <flux:select.option :value="$localeCode" :selected="$currentLocale === $localeCode">
-                                        {{ $localeLabel }}
-                                    </flux:select.option>
-                                @endforeach
-                            </flux:select>
-                        </form>
-                    </div>
 
                     <flux:menu.separator />
 

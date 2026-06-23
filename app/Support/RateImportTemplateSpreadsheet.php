@@ -63,8 +63,8 @@ class RateImportTemplateSpreadsheet
             [],
             $displayHeaders,
             $internalHeaders,
-            ['SUV', 'IFAR', '1250.00', 'MXN', now()->setDate(2026, 7, 1)->format($dateFormat), now()->setDate(2026, 7, 31)->format($dateFormat), 'WEEKEND', 'CUN'],
-            ['COMPACT', 'CDAR', '890.00', 'MXN', now()->setDate(2026, 7, 1)->format($dateFormat), now()->setDate(2026, 7, 31)->format($dateFormat), '', 'CUN'],
+            ['SUV', 'SUV', 'IFAR', '1250.00', 'MXN', now()->setDate(2026, 7, 1)->format($dateFormat), now()->setDate(2026, 7, 31)->format($dateFormat), 'WEEKEND', 'CUN'],
+            ['COMPACT', 'COMPACT', 'CDAR', '890.00', 'MXN', now()->setDate(2026, 7, 1)->format($dateFormat), now()->setDate(2026, 7, 31)->format($dateFormat), '', 'CUN'],
         ];
 
         $strings = collect($rows)->flatten()->map(fn (?string $value): string => (string) $value)->values();
@@ -207,12 +207,14 @@ XML);
             })
             ->implode('');
 
+        $lastTemplateColumn = count($this->columns());
+
         $archive->addFromString('xl/worksheets/sheet1.xml', <<<XML
 <?xml version="1.0" encoding="UTF-8"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
   <cols>
     <col min="1" max="1" width="18" customWidth="1"/>
-    <col min="2" max="8" width="20" customWidth="1"/>
+    <col min="2" max="{$lastTemplateColumn}" width="20" customWidth="1"/>
   </cols>
   <sheetData>{$sheetRows}</sheetData>
   <drawing r:id="rId1"/>

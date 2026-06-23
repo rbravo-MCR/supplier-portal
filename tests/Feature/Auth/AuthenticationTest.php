@@ -2,6 +2,8 @@
 
 use App\Models\Supplier;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 
 test('login screen can be rendered', function () {
     $response = $this->get(route('login'));
@@ -101,6 +103,30 @@ test('users can not authenticate with invalid password', function () {
     $response->assertSessionHasErrorsIn('username');
 
     $this->assertGuest();
+});
+
+test('legacy plain passwords are upgraded to bcrypt after successful authentication', function () {
+    $user = User::factory()->create(['username' => 'legacy']);
+
+    DB::table('users')
+        ->where('id', $user->id)
+        ->update(['password' => '12345678']);
+
+    expect(DB::table('users')->where('id', $user->id)->value('password'))->toBe('12345678');
+
+    $response = $this->post(route('login.store'), [
+        'username' => 'legacy',
+        'password' => '12345678',
+    ]);
+
+    $response->assertSessionHasNoErrors();
+
+    $this->assertAuthenticatedAs($user);
+
+    $user->refresh();
+
+    expect(Hash::info($user->password)['algoName'] ?? null)->toBe('bcrypt')
+        ->and(Hash::check('12345678', $user->password))->toBeTrue();
 });
 
 test('disabled users cannot authenticate', function () {

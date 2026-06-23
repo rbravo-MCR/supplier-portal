@@ -15,14 +15,24 @@ return [
                     'fr' => ['Véhicule', 'Classe véhicule', 'vehicle_class'],
                 ],
             ],
-            'category' => [
+            'category_code' => [
                 'required' => true,
-                'translation_key' => 'imports.category',
+                'translation_key' => 'imports.category_code',
                 'aliases' => [
-                    'es' => ['Categoría', 'Código ACRISS', 'ACRISS', 'acriss_code'],
-                    'en' => ['Category', 'ACRISS code', 'ACRISS', 'acriss_code'],
-                    'pt' => ['Categoria', 'Código ACRISS', 'ACRISS', 'acriss_code'],
-                    'fr' => ['Catégorie', 'Code ACRISS', 'ACRISS', 'acriss_code'],
+                    'es' => ['Código categoría', 'Categoría', 'category_code', 'category'],
+                    'en' => ['Category code', 'Category', 'category_code', 'category'],
+                    'pt' => ['Código da categoria', 'Categoria', 'category_code', 'category'],
+                    'fr' => ['Code catégorie', 'Catégorie', 'category_code', 'category'],
+                ],
+            ],
+            'acriss_code' => [
+                'required' => true,
+                'translation_key' => 'imports.acriss_code',
+                'aliases' => [
+                    'es' => ['Código ACRISS', 'ACRISS', 'acriss_code'],
+                    'en' => ['ACRISS code', 'ACRISS', 'acriss_code'],
+                    'pt' => ['Código ACRISS', 'ACRISS', 'acriss_code'],
+                    'fr' => ['Code ACRISS', 'ACRISS', 'acriss_code'],
                 ],
             ],
             'price' => [

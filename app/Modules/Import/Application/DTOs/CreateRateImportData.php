@@ -14,5 +14,6 @@ class CreateRateImportData
         public readonly string $storedPath,
         public readonly int $uploadedBy,
         public readonly array $rows,
+        public readonly ?int $supplierId = null,
     ) {}
 }

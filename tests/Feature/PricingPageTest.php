@@ -13,7 +13,7 @@ use Illuminate\Support\Facades\Cache;
 use Livewire\Livewire;
 
 test('pricing page displays vehicle rate data', function () {
-    $supplier = Supplier::factory()->create(['name' => 'Demo Rent', 'code' => 'DEMO']);
+    $supplier = Supplier::factory()->create(['id' => 85, 'name' => 'LOCALIZA', 'code' => 'jdebenito']);
     $user = User::factory()->create([
         'role' => 'supplier_admin',
         'supplier_id' => $supplier->id,
@@ -41,6 +41,8 @@ test('pricing page displays vehicle rate data', function () {
         ->assertSee('SUV')
         ->assertSee('IFAR')
         ->assertSee('CUN')
+        ->assertSee('LOCALIZA')
+        ->assertDontSee('jdebenito')
         ->assertSee('USD 125,50');
 });
 
@@ -154,6 +156,37 @@ test('admin supplier selection defaults currency from selected supplier country'
         ->assertSet('currencyId', null)
         ->set('supplierId', $supplier->id)
         ->assertSet('currencyId', $brl->id);
+});
+
+test('admin supplier selection filters rate table by selected supplier and shows supplier name', function () {
+    $supplier = Supplier::factory()->create(['id' => 85, 'name' => 'LOCALIZA', 'code' => 'jdebenito']);
+    $otherSupplier = Supplier::factory()->create(['name' => 'SOBERA RENT A CAR', 'code' => 'jsobera']);
+    $user = User::factory()->create([
+        'role' => 'admin',
+        'supplier_id' => null,
+    ]);
+
+    Rate::factory()->create([
+        'supplier_id' => $supplier->id,
+        'vehicle_class' => 'SUV',
+        'acriss_code' => 'IFAR',
+        'office_code' => 'CUN',
+        'rate_plan_code' => 'WEEKEND',
+    ]);
+    Rate::factory()->create([
+        'supplier_id' => $otherSupplier->id,
+        'vehicle_class' => 'COMPACT',
+        'acriss_code' => 'CCMR',
+        'office_code' => 'CUN',
+        'rate_plan_code' => 'WEEKEND',
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::pricing')
+        ->set('supplierId', $supplier->id)
+        ->assertSee('LOCALIZA')
+        ->assertSee('IFAR')
+        ->assertDontSee('CCMR');
 });
 
 test('supplier user cannot publish rates for another supplier by changing livewire state', function () {

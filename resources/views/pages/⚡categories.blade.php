@@ -5,7 +5,7 @@ use App\Models\VehicleCategory;
 use App\Models\VehicleCategoryAcrissCode;
 use App\Models\VehicleCategoryCatalog;
 use Flux\Flux;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -260,7 +260,7 @@ new #[Title('Categorías')] class extends Component {
     }
 
     #[Computed]
-    public function categories(): LengthAwarePaginator
+    public function categories(): Paginator
     {
         return VehicleCategory::query()
             ->with(['supplier:id,name,code', 'catalog:id,code,name_es'])
@@ -280,7 +280,7 @@ new #[Title('Categorías')] class extends Component {
                 });
             })
             ->orderBy('name')
-            ->paginate(10);
+            ->simplePaginate(10);
     }
 
     private function editableCategoryQuery(): Builder

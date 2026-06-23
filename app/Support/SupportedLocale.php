@@ -30,6 +30,16 @@ class SupportedLocale
     }
 
     /**
+     * @return array<string, string>
+     */
+    public static function menuOptions(): array
+    {
+        return collect(self::all())
+            ->mapWithKeys(fn (array $locale, string $code): array => [$code => __("locales.{$code}")])
+            ->all();
+    }
+
+    /**
      * @return array<int, string>
      */
     public static function codes(): array

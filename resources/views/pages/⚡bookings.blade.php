@@ -5,7 +5,7 @@ use App\Jobs\RecordAuditLog;
 use App\Jobs\RecordBookingAction;
 use App\Models\Booking;
 use Flux\Flux;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -108,14 +108,14 @@ new #[Title('Reservas')] class extends Component {
     }
 
     #[Computed]
-    public function bookings(): LengthAwarePaginator
+    public function bookings(): Paginator
     {
         return $this->pendingBookingQuery()
             ->when($this->search !== '', function (Builder $query): void {
                 $query->search($this->search);
             })
             ->orderBy('pickup_at')
-            ->paginate(10);
+            ->simplePaginate(10);
     }
 
     private function pendingBookingQuery(): Builder

@@ -1,7 +1,7 @@
 <?php
 
 use App\Models\Booking;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Attributes\Computed;
@@ -20,7 +20,7 @@ new #[Title('Auditoría')] class extends Component {
     }
 
     #[Computed]
-    public function bookings(): LengthAwarePaginator
+    public function bookings(): Paginator
     {
         return Booking::query()
             ->with('supplier:id,name,code')
@@ -29,7 +29,7 @@ new #[Title('Auditoría')] class extends Component {
                 $query->search($this->search);
             })
             ->orderByDesc('created_at')
-            ->paginate(10);
+            ->simplePaginate(10);
     }
 
     /**

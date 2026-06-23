@@ -1,6 +1,8 @@
 <?php
 
+use App\Models\Currency;
 use App\Models\Office;
+use App\Models\Rate;
 use App\Models\RateImport;
 use App\Models\Supplier;
 use App\Models\User;
@@ -11,6 +13,10 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+
+beforeEach(function () {
+    App::setLocale('es');
+});
 
 test('imports page shows the latest five uploads', function () {
     $supplier = Supplier::factory()->create(['code' => 'DEMO']);
@@ -50,6 +56,30 @@ test('imports page exposes a supplier template download', function () {
         ->assertOk()
         ->assertSee('Plantilla por proveedor')
         ->assertSee('data-test="import-template-download"', false);
+});
+
+test('imports page presents the excel data requirements', function () {
+    $supplier = Supplier::factory()->create(['code' => 'DEMO']);
+    $user = User::factory()->create([
+        'role' => 'supplier_admin',
+        'supplier_id' => $supplier->id,
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('portal.imports'))
+        ->assertOk()
+        ->assertSee('Datos requeridos para el Excel')
+        ->assertSee('Vehículo')
+        ->assertSee('vehicle_name')
+        ->assertSee('vehicle_class')
+        ->assertSee('Código categoría')
+        ->assertSee('category_code')
+        ->assertSee('Código ACRISS')
+        ->assertSee('acriss_code')
+        ->assertSee('Precio')
+        ->assertSee('Obligatoria')
+        ->assertSee('Promoción')
+        ->assertSee('Opcional');
 });
 
 test('admin can activate template download by selecting a supplier', function () {
@@ -184,9 +214,12 @@ test('rate template header is accepted by the import reader', function () {
         ->and($parsed['headers'])->toContain('promotion')
         ->and($parsed['rows'])->toHaveCount(2)
         ->and($parsed['rows'][0]['vehicle_name'])->toBe('SUV')
+        ->and($parsed['rows'][0]['category_code'])->toBe('SUV')
+        ->and($parsed['rows'][0]['acriss_code'])->toBe('IFAR')
         ->and($parsed['rows'][0]['price'])->toBe('1250.00')
         ->and($strings)->toContain('Vehicle')
-        ->and($strings)->toContain('Category')
+        ->and($strings)->toContain('Category code')
+        ->and($strings)->toContain('ACRISS code')
         ->and($strings)->toContain('Price')
         ->and($strings)->toContain('Valid from');
 });
@@ -205,8 +238,8 @@ test('localized supplier templates are generated for every supported locale', fu
 
 test('import reader accepts translated excel headers without using them as business keys', function () {
     $path = tempExcelPath([
-        ['Office', 'Vehicle', 'Category', 'Price', 'Currency', 'Valid from', 'Valid until', 'Promotion'],
-        ['CUN', 'SUV', 'IFAR', '125.50', 'USD', '06/05/2026', '07/05/2026', 'Weekend'],
+        ['Office', 'Vehicle', 'Category code', 'ACRISS code', 'Price', 'Currency', 'Valid from', 'Valid until', 'Promotion'],
+        ['CUN', 'SUV', 'SUV', 'IFAR', '125.50', 'USD', '06/05/2026', '07/05/2026', 'Weekend'],
     ]);
 
     try {
@@ -219,7 +252,8 @@ test('import reader accepts translated excel headers without using them as busin
         ->and($parsed['headers'])->toBe([
             'office_code',
             'vehicle_name',
-            'category',
+            'category_code',
+            'acriss_code',
             'price',
             'currency',
             'valid_from',
@@ -229,23 +263,26 @@ test('import reader accepts translated excel headers without using them as busin
         ->and($parsed['rows'][0])->toMatchArray([
             'office_code' => 'CUN',
             'vehicle_name' => 'SUV',
-            'category' => 'IFAR',
+            'category_code' => 'SUV',
+            'acriss_code' => 'IFAR',
             'price' => '125.50',
         ]);
 });
 
 test('import reader returns translated row validation errors', function (string $locale, string $expectedMessage) {
+    $originalLocale = App::currentLocale();
     App::setLocale($locale);
 
     $path = tempExcelPath([
-        [headerForLocale('vehicle_name', $locale), headerForLocale('category', $locale), headerForLocale('price', $locale), headerForLocale('currency', $locale), headerForLocale('valid_from', $locale), headerForLocale('valid_until', $locale)],
-        ['SUV', 'IFAR', '', 'USD', '2026-06-05', '2026-07-05'],
+        [headerForLocale('vehicle_name', $locale), headerForLocale('category_code', $locale), headerForLocale('acriss_code', $locale), headerForLocale('price', $locale), headerForLocale('currency', $locale), headerForLocale('valid_from', $locale), headerForLocale('valid_until', $locale)],
+        ['SUV', 'SUV', 'IFAR', '', 'USD', '2026-06-05', '2026-07-05'],
     ]);
 
     try {
         $parsed = app(RateImportSpreadsheet::class)->read($path, $locale);
     } finally {
         @unlink($path);
+        App::setLocale($originalLocale);
     }
 
     expect($parsed['summary'])->toBe([
@@ -261,6 +298,8 @@ test('import reader returns translated row validation errors', function (string 
 ]);
 
 test('imports page shows translated error summary and downloadable error report', function () {
+    App::setLocale('en');
+
     $supplier = Supplier::factory()->create();
     $user = User::factory()->create([
         'role' => 'supplier_admin',
@@ -271,8 +310,8 @@ test('imports page shows translated error summary and downloadable error report'
     Livewire::actingAs($user)
         ->test('pages::imports')
         ->set('file', excelUpload([
-            ['Vehicle', 'Category', 'Price', 'Currency', 'Valid from', 'Valid until'],
-            ['SUV', 'IFAR', '', 'USD', '2026-06-05', '2026-07-05'],
+            ['Vehicle', 'Category code', 'ACRISS code', 'Price', 'Currency', 'Valid from', 'Valid until'],
+            ['SUV', 'SUV', 'IFAR', '', 'USD', '2026-06-05', '2026-07-05'],
         ]))
         ->assertSet('formatIsValid', false)
         ->assertSet('importSummary', [
@@ -296,12 +335,15 @@ test('imports page validates the expected excel format before upload', function 
     Livewire::actingAs($user)
         ->test('pages::imports')
         ->set('file', excelUpload([
-            ['office_code', 'vehicle_class', 'acriss_code', 'rate_plan_code', 'currency', 'base_price', 'valid_from', 'valid_to'],
-            ['CUN', 'SUV', 'IFAR', 'STD', 'USD', '125.50', '2026-06-05', '2026-07-05'],
+            ['office_code', 'vehicle_class', 'category_code', 'acriss_code', 'rate_plan_code', 'currency', 'base_price', 'valid_from', 'valid_to'],
+            ['CUN', 'SUV', 'SUV', 'IFAR', 'STD', 'USD', '125.50', '2026-06-05', '2026-07-05'],
         ]))
         ->assertSet('formatIsValid', true)
         ->assertSet('detectedRows', 1)
-        ->assertSee('Formato validado.');
+        ->assertSee('Formato validado.')
+        ->assertSee('type="submit"', false)
+        ->assertDontSee('wire:click="commitImport"')
+        ->assertSee('data-test="import-processing-overlay"', false);
 });
 
 test('imports page rejects excel files with the wrong format', function () {
@@ -322,9 +364,13 @@ test('imports page rejects excel files with the wrong format', function () {
         ->assertSee('Faltan columnas');
 });
 
-test('imports page uploads validated excel files into staging rows', function () {
+test('imports page uploads validated excel files into staging rows and publishes rates', function () {
     Storage::fake();
 
+    $currency = Currency::query()->firstOrCreate(
+        ['code' => 'USD'],
+        ['numeric_code' => '840', 'name' => 'US Dollar', 'symbol' => '$', 'decimal_places' => 2, 'is_active' => true],
+    );
     $supplier = Supplier::factory()->create();
     $user = User::factory()->create([
         'role' => 'supplier_admin',
@@ -334,22 +380,64 @@ test('imports page uploads validated excel files into staging rows', function ()
     Livewire::actingAs($user)
         ->test('pages::imports')
         ->set('file', excelUpload([
-            ['office_code', 'vehicle_class', 'acriss_code', 'rate_plan_code', 'currency', 'base_price', 'valid_from', 'valid_to'],
-            ['CUN', 'SUV', 'IFAR', 'STD', 'USD', '125.50', '2026-06-05', '2026-07-05'],
-            ['MEX', 'COMPACT', 'CDAR', 'WEEKEND', 'USD', '90.00', '2026-06-05', '2026-07-05'],
+            ['office_code', 'vehicle_class', 'category_code', 'acriss_code', 'rate_plan_code', 'currency', 'base_price', 'valid_from', 'valid_to'],
+            ['CUN', 'SUV', 'SUV', 'IFAR', 'STD', 'USD', '125.50', '2026-06-05', '2026-07-05'],
+            ['MEX', 'COMPACT', 'COMPACT', 'CDAR', 'WEEKEND', 'USD', '90.00', '46204', '46234'],
         ]))
-        ->call('upload')
-        ->assertHasNoErrors();
+        ->call('commitImport')
+        ->assertHasNoErrors()
+        ->assertSet('lastImportedRows', 2)
+        ->assertSet('successMessage', 'Precios cargados correctamente. 2 filas guardadas.')
+        ->assertSee('data-test="import-success"', false)
+        ->assertSee('rates.xlsx');
 
     $this->assertDatabaseHas('rate_imports', [
         'supplier_id' => $supplier->id,
         'original_filename' => 'rates.xlsx',
-        'status' => 'uploaded',
+        'status' => 'published',
         'total_rows' => 2,
+        'valid_rows' => 2,
+        'invalid_rows' => 0,
         'uploaded_by' => $user->id,
     ]);
 
     $this->assertDatabaseCount('rate_import_rows', 2);
+    $this->assertDatabaseHas('rate_import_rows', [
+        'row_number' => 1,
+        'status' => 'published',
+    ]);
+    $this->assertDatabaseHas('rates', [
+        'supplier_id' => $supplier->id,
+        'office_code' => 'CUN',
+        'vehicle_class' => 'SUV',
+        'acriss_code' => 'IFAR',
+        'rate_plan_code' => 'STD',
+        'currency_id' => $currency->id,
+        'base_price' => 125.50,
+        'status' => 'active',
+        'version' => 1,
+        'created_by' => $user->id,
+    ]);
+    $this->assertDatabaseHas('rates', [
+        'supplier_id' => $supplier->id,
+        'office_code' => 'MEX',
+        'vehicle_class' => 'COMPACT',
+        'acriss_code' => 'CDAR',
+        'rate_plan_code' => 'WEEKEND',
+        'currency_id' => $currency->id,
+        'base_price' => 90.00,
+        'status' => 'active',
+    ]);
+
+    $mexRate = Rate::query()
+        ->where('supplier_id', $supplier->id)
+        ->where('office_code', 'MEX')
+        ->where('acriss_code', 'CDAR')
+        ->firstOrFail();
+
+    expect(Rate::query()->where('supplier_id', $supplier->id)->count())->toBe(2)
+        ->and($mexRate->valid_from->toDateString())->toBe('2026-07-01')
+        ->and($mexRate->valid_to->toDateString())->toBe('2026-07-31');
 });
 
 /**

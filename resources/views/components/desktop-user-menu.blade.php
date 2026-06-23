@@ -1,10 +1,5 @@
 @props(['showTeam' => true])
 
-@php
-    $locales = \App\Support\SupportedLocale::options();
-    $currentLocale = \App\Support\SupportedLocale::normalize(auth()->user()->preferred_locale ?? session('locale'));
-@endphp
-
 <flux:dropdown position="bottom" align="start">
     <button type="button" class="group flex w-full items-center rounded-lg p-1 hover:bg-zinc-800/5 dark:hover:bg-white/10" data-test="sidebar-menu-button">
         <flux:avatar :initials="auth()->user()->initials()" size="sm" />
@@ -28,20 +23,6 @@
                 <flux:text class="truncate">{{ auth()->user()->email }}</flux:text>
             </div>
         </div>
-        <flux:menu.separator />
-        <div class="px-1 py-1.5">
-            <form method="POST" action="{{ route('locale.update') }}">
-                @csrf
-                <flux:select name="locale" :label="__('Idioma')" x-on:change="$event.target.form.submit()" data-test="user-locale-select">
-                    @foreach ($locales as $localeCode => $localeLabel)
-                        <flux:select.option :value="$localeCode" :selected="$currentLocale === $localeCode">
-                            {{ $localeLabel }}
-                        </flux:select.option>
-                    @endforeach
-                </flux:select>
-            </form>
-        </div>
-        <flux:menu.separator />
         <flux:menu.radio.group>
             <flux:menu.item :href="route('profile.edit')" icon="cog" wire:navigate>
                 {{ __('Settings') }}

@@ -8,7 +8,7 @@ use App\Models\Office;
 use App\Models\Supplier;
 use App\Models\Zone;
 use Flux\Flux;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -507,7 +507,7 @@ new #[Title('Oficinas')] class extends Component {
     }
 
     #[Computed]
-    public function offices(): LengthAwarePaginator
+    public function offices(): Paginator
     {
         return Office::query()
             ->with([
@@ -538,7 +538,7 @@ new #[Title('Oficinas')] class extends Component {
                 $query->search($this->search);
             })
             ->orderBy('name')
-            ->paginate(10);
+            ->simplePaginate(10);
     }
 }; ?>
 

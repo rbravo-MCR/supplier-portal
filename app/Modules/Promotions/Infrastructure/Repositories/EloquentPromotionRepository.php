@@ -7,12 +7,12 @@ use App\Modules\Promotions\Application\Contracts\PromotionRepository;
 use App\Modules\Promotions\Application\DTOs\CreatePromotionData;
 use App\Modules\Promotions\Application\DTOs\ListPromotionsFilter;
 use App\Modules\Promotions\Application\DTOs\UpdatePromotionData;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\Builder;
 
 class EloquentPromotionRepository implements PromotionRepository
 {
-    public function listForSupplier(int $supplierId, ListPromotionsFilter $filter): LengthAwarePaginator
+    public function listForSupplier(int $supplierId, ListPromotionsFilter $filter): Paginator
     {
         return Promotion::query()
             ->with(['offices:id,name,code', 'vehicleCategories:id,name,code', 'tiers'])
@@ -21,7 +21,7 @@ class EloquentPromotionRepository implements PromotionRepository
             ->when($filter->status !== null, fn (Builder $query) => $query->where('status', $filter->status))
             ->when($filter->search !== null && $filter->search !== '', fn (Builder $query) => $query->search($filter->search))
             ->orderByDesc('valid_from')
-            ->paginate($filter->perPage);
+            ->simplePaginate($filter->perPage);
     }
 
     public function hasActiveOverlap(int $supplierId, CreatePromotionData $data, ?string $excludeUuid = null): bool

@@ -13,7 +13,7 @@ use App\Modules\Promotions\Application\UseCases\ListPromotions;
 use App\Modules\Promotions\Application\UseCases\TogglePromotionStatus;
 use App\Modules\Promotions\Application\UseCases\UpdatePromotion;
 use Flux\Flux;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -274,7 +274,7 @@ new #[Title('Promociones')] class extends Component {
     }
 
     #[Computed]
-    public function promotions(): LengthAwarePaginator
+    public function promotions(): Paginator
     {
         $supplierId = Auth::user()->supplier_id;
 

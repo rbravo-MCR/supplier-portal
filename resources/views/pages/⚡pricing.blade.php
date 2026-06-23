@@ -7,7 +7,7 @@ use App\Models\Rate;
 use App\Models\Supplier;
 use App\Models\VehicleCategory;
 use Flux\Flux;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -69,6 +69,7 @@ new #[Title('Precios')] class extends Component {
     {
         $this->reset(['officeCode', 'vehicleCategoryId', 'acrissCode']);
         $this->currencyId = $this->defaultCurrencyIdForSupplier($this->supplierId);
+        $this->resetPage();
     }
 
     public function updatedVehicleCategoryId(): void
@@ -310,18 +311,20 @@ new #[Title('Precios')] class extends Component {
     }
 
     #[Computed]
-    public function rates(): LengthAwarePaginator
+    public function rates(): Paginator
     {
+        $supplierId = Auth::user()->supplier_id ?: $this->supplierId;
+
         return Rate::query()
             ->with(['supplier:id,name,code', 'currency:id,code,symbol,decimal_places'])
-            ->forSupplier(Auth::user()->supplier_id)
+            ->forSupplier($supplierId)
             ->when($this->status !== 'all', fn(Builder $query) => $query->where('status', $this->status))
             ->when($this->search !== '', function (Builder $query): void {
                 $query->search($this->search);
             })
             ->orderByDesc('valid_from')
             ->orderByDesc('id')
-            ->paginate(10);
+            ->simplePaginate(10);
     }
 
     private function selectedVehicleCategory(?int $supplierId): ?VehicleCategory
@@ -493,7 +496,7 @@ new #[Title('Precios')] class extends Component {
                         <flux:table.cell>{{ $rate->acriss_code }}</flux:table.cell>
                         <flux:table.cell>{{ $rate->office_code }}</flux:table.cell>
                         <flux:table.cell>{{ $rate->rate_plan_code }}</flux:table.cell>
-                        <flux:table.cell>{{ $rate->supplier?->code ?? '-' }}</flux:table.cell>
+                        <flux:table.cell>{{ $rate->supplier?->name ?? '-' }}</flux:table.cell>
                         <flux:table.cell>{{ format_date($rate->valid_from) }} / {{ format_date($rate->valid_to) }}
                         </flux:table.cell>
                         <flux:table.cell align="end">

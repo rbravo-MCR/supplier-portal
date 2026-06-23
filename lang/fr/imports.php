@@ -1,7 +1,9 @@
 <?php
 
 return [
+    'acriss_code' => 'Code ACRISS',
     'category' => 'Catégorie',
+    'category_code' => 'Code catégorie',
     'currency' => 'Devise',
     'office_code' => 'Code agence',
     'price' => 'Prix',

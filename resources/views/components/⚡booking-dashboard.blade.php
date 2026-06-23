@@ -29,7 +29,8 @@ new class extends Component {
     public function statusBars(): array
     {
         $supplierId = Auth::user()->supplier_id;
-        $cacheKey = "dashboard.statusBars.{$supplierId}.{$this->startDate}.{$this->endDate}";
+        $locale = app()->getLocale();
+        $cacheKey = "dashboard.statusBars.{$supplierId}.{$this->startDate}.{$this->endDate}.{$locale}";
 
         return cache()->remember($cacheKey, 60, function (): array {
             $counts = $this->bookingQuery()

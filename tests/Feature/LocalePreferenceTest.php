@@ -97,6 +97,27 @@ test('authenticated users see the portal in their preferred locale', function (s
     'fr' => ['fr', 'Résumé des réservations par statut avec filtre par date de réservation.'],
 ]);
 
+test('authenticated users see locale menu options with flags', function () {
+    $user = User::factory()->create([
+        'role' => 'admin',
+        'preferred_locale' => 'es',
+    ]);
+
+    $this->actingAs($user)
+        ->get(route('admin.dashboard'))
+        ->assertOk()
+        ->assertSee('data-test="sidebar-locale-select"', false)
+        ->assertSee('data-test="sidebar-locale-select-flag"', false)
+        ->assertSee('data-test="sidebar-locale-select-spinner"', false)
+        ->assertSee('data-test="mobile-header-locale-select"', false)
+        ->assertSee('data-test="mobile-header-locale-select-flag"', false)
+        ->assertSee('data-test="mobile-header-locale-select-spinner"', false)
+        ->assertSee('Español')
+        ->assertSee('Inglés')
+        ->assertSee('Portugués')
+        ->assertSee('Francés');
+});
+
 test('empty preferred locale falls back to spanish', function () {
     $user = User::factory()->create([
         'role' => 'admin',

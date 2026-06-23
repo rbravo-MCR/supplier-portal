@@ -6,7 +6,7 @@ use App\Models\Supplier;
 use App\Models\User;
 use App\Support\SupportedLocale;
 use Flux\Flux;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -197,7 +197,7 @@ new #[Title('Usuarios')] class extends Component {
     }
 
     #[Computed]
-    public function users(): LengthAwarePaginator
+    public function users(): Paginator
     {
         return User::query()
             ->with(['supplier:id,name,code', 'portalRole:id,name,code'])
@@ -209,7 +209,7 @@ new #[Title('Usuarios')] class extends Component {
                 $query->where('preferred_locale', $this->localeFilter);
             })
             ->orderBy('name')
-            ->paginate(10);
+            ->simplePaginate(10);
     }
 };
 ?>

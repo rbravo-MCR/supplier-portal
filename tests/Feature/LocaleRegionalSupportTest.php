@@ -46,6 +46,21 @@ test('locale service uses user timezone before locale timezone', function () {
         ->and(format_datetime($date))->toBe('06/18/2026 02:00 PM');
 });
 
+test('date formatting preserves date values without timezone shifting', function () {
+    $user = User::factory()->create([
+        'preferred_locale' => 'en',
+        'timezone' => 'America/New_York',
+    ]);
+
+    $this->actingAs($user);
+    App::setLocale('en');
+
+    $date = Carbon::parse('2026-07-01 00:00:00', 'UTC');
+
+    expect(format_date($date))->toBe('07/01/2026')
+        ->and(format_datetime($date))->toBe('06/30/2026 08:00 PM');
+});
+
 test('locale service falls back to locale timezone when user timezone is empty', function () {
     $user = User::factory()->create([
         'preferred_locale' => 'pt',

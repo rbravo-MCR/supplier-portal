@@ -5,12 +5,15 @@ use App\Models\Office;
 use App\Models\Supplier;
 use App\Modules\Import\Application\DTOs\CreateRateImportData;
 use App\Modules\Import\Application\UseCases\CreateRateImport;
+use App\Modules\Import\Application\UseCases\PublishRateImportRows;
 use App\Support\RateImportErrorSpreadsheet;
 use App\Support\RateImportSpreadsheet;
 use Flux\Flux;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\File;
 use Livewire\Attributes\Computed;
@@ -48,6 +51,10 @@ new #[Title('Importaciones')] class extends Component {
 
     public string $errorReportFilename = '';
 
+    public string $successMessage = '';
+
+    public int $lastImportedRows = 0;
+
     /**
      * @var list<array<string, mixed>>
      */
@@ -61,6 +68,7 @@ new #[Title('Importaciones')] class extends Component {
     public function updatedFile(RateImportSpreadsheet $spreadsheet, RateImportErrorSpreadsheet $errorSpreadsheet): void
     {
         $this->resetValidationState();
+        $this->resetSuccessState();
 
         $this->validate([
             'file' => [
@@ -125,42 +133,102 @@ new #[Title('Importaciones')] class extends Component {
     {
         $this->selectedOfficeIds = [];
         $this->resetValidationState();
+        $this->resetSuccessState();
     }
 
-    public function upload(CreateRateImport $createRateImport): void
+    public function commitImport(CreateRateImport $createRateImport, PublishRateImportRows $publishRateImportRows): void
     {
+        $this->resetSuccessState();
+
         if (! $this->formatIsValid || $this->file === null || $this->parsedRows === []) {
             $this->addError('file', __('Valida un Excel con el formato correcto antes de cargar.'));
 
             return;
         }
 
-        $storedPath = $this->file->store('imports');
+        Log::info('Rate import commit started', [
+            'user_id' => Auth::id(),
+            'supplier_id' => $this->supplierId,
+            'rows' => count($this->parsedRows),
+        ]);
+
         $originalFilename = $this->file->getClientOriginalName();
 
-        if (! Auth::user()->supplier_id) {
-            $user = Auth::user();
-            $originalSupplierId = $user->supplier_id;
-            $user->forceFill(['supplier_id' => $this->supplierId]);
-        }
-
         try {
-            $createRateImport->handle(new CreateRateImportData(
+            $storedPath = $this->file->store('imports');
+
+            $rateImport = $createRateImport->handle(new CreateRateImportData(
                 originalFilename: $originalFilename,
                 storedPath: $storedPath,
                 uploadedBy: Auth::id(),
                 rows: $this->parsedRows,
+                supplierId: $this->supplierId,
             ));
-        } finally {
-            if (isset($user, $originalSupplierId)) {
-                $user->forceFill(['supplier_id' => $originalSupplierId]);
-            }
+
+            $publishResult = $publishRateImportRows->handle($rateImport, Auth::id());
+
+            RateImport::query()
+                ->where('supplier_id', $this->supplierId)
+                ->where('id', '!=', $rateImport->id)
+                ->get()
+                ->each(function (RateImport $import) {
+                    if ($import->stored_path && Storage::exists($import->stored_path)) {
+                        Storage::delete($import->stored_path);
+                    }
+                    $import->rows()->delete();
+                    $import->delete();
+                });
+        } catch (Throwable $exception) {
+            report($exception);
+
+            Log::error('Rate import commit failed', [
+                'user_id' => Auth::id(),
+                'supplier_id' => $this->supplierId,
+                'filename' => $originalFilename,
+                'message' => $exception->getMessage(),
+            ]);
+
+            $this->validationMessage = __('No se pudo guardar la importación. Intenta nuevamente.');
+            $this->addError('file', $this->validationMessage);
+
+            return;
+        }
+
+        if ($publishResult['errors'] !== []) {
+            $this->importSummary = [
+                'processed' => $rateImport->total_rows,
+                'successful' => 0,
+                'failed' => count($publishResult['errors']),
+            ];
+            $this->validationMessage = __('No se pudieron publicar los precios en la tabla final.');
+            $this->addError('file', $this->validationMessage);
+
+            Log::warning('Rate import publish failed validation', [
+                'user_id' => Auth::id(),
+                'supplier_id' => $rateImport->supplier_id,
+                'rate_import_id' => $rateImport->id,
+                'errors' => $publishResult['errors'],
+            ]);
+
+            return;
         }
 
         $this->file = null;
+        $this->lastImportedRows = $publishResult['published'];
+        $this->successMessage = __('Precios cargados correctamente. :count filas guardadas.', [
+            'count' => format_number($this->lastImportedRows),
+        ]);
         $this->resetValidationState();
+        unset($this->recentImports);
 
-        Flux::toast(variant: 'success', text: __('Carga registrada.'));
+        Log::info('Rate import commit completed', [
+            'user_id' => Auth::id(),
+            'supplier_id' => $rateImport->supplier_id,
+            'rate_import_id' => $rateImport->id,
+            'rows' => $publishResult['published'],
+        ]);
+
+        Flux::toast(variant: 'success', text: $this->successMessage);
     }
 
     protected function resetValidationState(): void
@@ -178,6 +246,12 @@ new #[Title('Importaciones')] class extends Component {
         $this->errorReportFilename = '';
     }
 
+    protected function resetSuccessState(): void
+    {
+        $this->successMessage = '';
+        $this->lastImportedRows = 0;
+    }
+
     /**
      * @param  list<array{row: int, field: string, message: string}>  $errors
      */
@@ -193,6 +267,39 @@ new #[Title('Importaciones')] class extends Component {
         $translationKey = $column['translation_key'] ?? null;
 
         return is_string($translationKey) ? __($translationKey) : $key;
+    }
+
+    /**
+     * @return Collection<int, array{key: string, label: string, required: bool, aliases: list<string>}>
+     */
+    #[Computed]
+    public function importColumns(): Collection
+    {
+        return collect(config('imports.pricing_template.columns', []))
+            ->map(fn (array $column, string $key): array => [
+                'key' => $key,
+                'label' => $this->columnLabel($key),
+                'required' => (bool) ($column['required'] ?? false),
+                'aliases' => $this->localizedColumnAliases($key, $column),
+            ])
+            ->values();
+    }
+
+    /**
+     * @param  array<string, mixed>  $column
+     * @return list<string>
+     */
+    protected function localizedColumnAliases(string $key, array $column): array
+    {
+        $aliases = $column['aliases'][app()->getLocale()] ?? [];
+
+        return collect($aliases)
+            ->push($key)
+            ->map(fn (string $alias): string => trim($alias))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
     }
 
     /**
@@ -245,7 +352,7 @@ new #[Title('Importaciones')] class extends Component {
             ->with('supplier:id,name,code')
             ->forSupplier(Auth::user()->supplier_id)
             ->latest()
-            ->limit(5)
+            ->limit(1)
             ->get();
     }
 }; ?>
@@ -260,8 +367,8 @@ new #[Title('Importaciones')] class extends Component {
 
     <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_24rem]">
         <form
-            wire:submit="upload"
-            class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900"
+            wire:submit="commitImport"
+            class="relative rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900"
             x-data="{ uploading: false, progress: 0 }"
             x-on:livewire-upload-start="uploading = true; progress = 0"
             x-on:livewire-upload-finish="uploading = false; progress = 100"
@@ -269,10 +376,63 @@ new #[Title('Importaciones')] class extends Component {
             x-on:livewire-upload-error="uploading = false"
             x-on:livewire-upload-progress="progress = $event.detail.progress"
         >
+            <div
+                wire:loading.flex
+                wire:target="commitImport"
+                class="absolute inset-0 z-10 hidden items-center justify-center rounded-lg bg-white/80 backdrop-blur-sm dark:bg-zinc-950/70"
+                data-test="import-processing-overlay"
+            >
+                <div class="flex flex-col items-center gap-3 rounded-lg border border-zinc-200 bg-white p-4 text-center shadow-sm dark:border-zinc-700 dark:bg-zinc-900">
+                    <svg class="size-6 animate-spin text-green-600" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                    </svg>
+                    <flux:text>{{ __('Registrando carga y filas de staging...') }}</flux:text>
+                </div>
+            </div>
+
             <div class="flex flex-col gap-4">
                 <div>
                     <flux:heading>{{ __('Nueva carga') }}</flux:heading>
-                    <flux:text>{{ __('Formato requerido: columnas office_code, vehicle_class, acriss_code, rate_plan_code, currency, base_price, valid_from, valid_to.') }}</flux:text>
+                    <flux:text>{{ __('Selecciona el proveedor, descarga la plantilla o carga un Excel que incluya los datos requeridos.') }}</flux:text>
+                </div>
+
+                <div class="overflow-hidden rounded-lg border border-zinc-200 dark:border-zinc-700" data-test="import-required-data">
+                    <div class="border-b border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-700 dark:bg-zinc-800">
+                        <flux:heading size="sm">{{ __('Datos requeridos para el Excel') }}</flux:heading>
+                        <flux:text class="text-sm">
+                            {{ __('Usa estos encabezados en la primera fila. La importación también acepta los alias indicados.') }}
+                        </flux:text>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-700">
+                            <thead class="bg-white text-left text-xs font-medium uppercase text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
+                                <tr>
+                                    <th scope="col" class="px-3 py-2">{{ __('Dato') }}</th>
+                                    <th scope="col" class="px-3 py-2">{{ __('Clave') }}</th>
+                                    <th scope="col" class="px-3 py-2">{{ __('Requisito') }}</th>
+                                    <th scope="col" class="px-3 py-2">{{ __('Encabezados aceptados') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-zinc-200 bg-white dark:divide-zinc-700 dark:bg-zinc-900">
+                                @foreach ($this->importColumns as $column)
+                                    <tr wire:key="import-column-{{ $column['key'] }}">
+                                        <td class="px-3 py-2 font-medium text-zinc-900 dark:text-zinc-100">{{ $column['label'] }}</td>
+                                        <td class="px-3 py-2 font-mono text-xs text-zinc-600 dark:text-zinc-300">{{ $column['key'] }}</td>
+                                        <td class="px-3 py-2">
+                                            <flux:badge :color="$column['required'] ? 'red' : 'zinc'" size="sm">
+                                                {{ $column['required'] ? __('Obligatoria') : __('Opcional') }}
+                                            </flux:badge>
+                                        </td>
+                                        <td class="px-3 py-2 text-zinc-600 dark:text-zinc-300">
+                                            {{ implode(', ', $column['aliases']) }}
+                                        </td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
 
                 @if (! Auth::user()->supplier_id)
@@ -373,6 +533,14 @@ new #[Title('Importaciones')] class extends Component {
                             <div class="text-sm">{{ __(':count filas detectadas.', ['count' => format_number($detectedRows)]) }}</div>
                         </div>
                     </div>
+                @elseif ($successMessage !== '')
+                    <div class="flex items-center gap-3 rounded-lg border border-green-200 bg-green-50 p-3 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-200" data-test="import-success">
+                        <flux:icon.check-circle class="size-5" />
+                        <div>
+                            <div class="font-medium">{{ $successMessage }}</div>
+                            <div class="text-sm">{{ __('La importación quedó registrada en el historial.') }}</div>
+                        </div>
+                    </div>
                 @elseif ($validationMessage !== '')
                     <div class="space-y-3 rounded-lg border border-red-200 bg-red-50 p-3 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-200" data-test="import-invalid">
                         <div class="font-medium">{{ $validationMessage }}</div>
@@ -389,28 +557,43 @@ new #[Title('Importaciones')] class extends Component {
                     </div>
                 @endif
 
-                <div wire:loading wire:target="upload" class="space-y-2">
+                <div wire:loading wire:target="commitImport" class="space-y-2">
                     <flux:progress value="75" color="green" />
                     <flux:text>{{ __('Registrando carga y filas de staging...') }}</flux:text>
                 </div>
 
                 <div class="flex justify-end">
-                    <flux:button
-                        type="submit"
-                        variant="primary"
-                        icon="check"
-                        class="bg-green-600! hover:bg-green-700!"
-                        :disabled="! $formatIsValid"
-                        data-test="import-submit"
-                    >
-                        {{ __('Proceder a cargar') }}
-                    </flux:button>
+                    @if ($formatIsValid)
+                        <flux:button
+                            type="submit"
+                            wire:loading.attr="disabled"
+                            wire:target="commitImport"
+                            variant="primary"
+                            icon="check"
+                            class="bg-green-600! hover:bg-green-700!"
+                            data-test="import-submit"
+                        >
+                            <span wire:loading.remove wire:target="commitImport">{{ __('Proceder a cargar') }}</span>
+                            <span wire:loading wire:target="commitImport">{{ __('Registrando carga y filas de staging...') }}</span>
+                        </flux:button>
+                    @else
+                        <flux:button
+                            type="submit"
+                            variant="primary"
+                            icon="check"
+                            class="bg-green-600! hover:bg-green-700!"
+                            disabled
+                            data-test="import-submit"
+                        >
+                            {{ __('Proceder a cargar') }}
+                        </flux:button>
+                    @endif
                 </div>
             </div>
         </form>
 
         <div class="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
-            <flux:heading>{{ __('Últimas 5 cargas') }}</flux:heading>
+            <flux:heading>{{ __('Última carga') }}</flux:heading>
 
             <div class="mt-4 space-y-3">
                 @forelse ($this->recentImports as $import)

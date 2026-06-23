@@ -29,7 +29,7 @@ class CreateRateImport
         }
 
         $rateImport = $this->rateImports->createWithRows(
-            supplierId: $this->supplierContext->id(),
+            supplierId: $data->supplierId ?? $this->supplierContext->id(),
             data: $data,
         );
 

@@ -64,7 +64,7 @@ class FortifyServiceProvider extends ServiceProvider
                 return null;
             }
 
-            if (! Hash::check((string) $request->input('password'), $user->password)) {
+            if (! $this->passwordMatches($user, (string) $request->input('password'))) {
                 return null;
             }
 
@@ -103,5 +103,27 @@ class FortifyServiceProvider extends ServiceProvider
 
             return Limit::perMinute(5)->by($throttleKey);
         });
+    }
+
+    /**
+     * Validate legacy plain passwords and migrate them to bcrypt after a successful login.
+     */
+    private function passwordMatches(User $user, string $password): bool
+    {
+        $storedPassword = (string) $user->password;
+
+        if ((Hash::info($storedPassword)['algoName'] ?? null) === 'bcrypt') {
+            return Hash::check($password, $storedPassword);
+        }
+
+        if (! hash_equals($storedPassword, $password)) {
+            return false;
+        }
+
+        $user->forceFill([
+            'password' => Hash::make($password),
+        ])->save();
+
+        return true;
     }
 }

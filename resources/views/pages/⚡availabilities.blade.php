@@ -3,7 +3,7 @@
 use App\Concerns\RemembersModelRows;
 use App\Models\Supplier;
 use App\Models\VehicleAvailability;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -79,7 +79,7 @@ new #[Title('Disponibilidad')] class extends Component {
     }
 
     #[Computed]
-    public function availabilities(): LengthAwarePaginator
+    public function availabilities(): Paginator
     {
         return VehicleAvailability::query()
             ->with('supplier:id,name,code', 'office:id,name,code,iata_code')
@@ -90,7 +90,7 @@ new #[Title('Disponibilidad')] class extends Component {
             ->when($this->search !== '', fn (Builder $query) => $query->search($this->search))
             ->orderByDesc('valid_from')
             ->orderByDesc('id')
-            ->paginate(15);
+            ->simplePaginate(15);
     }
 }; ?>
 

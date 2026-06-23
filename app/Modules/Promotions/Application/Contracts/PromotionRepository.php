@@ -6,11 +6,11 @@ use App\Models\Promotion;
 use App\Modules\Promotions\Application\DTOs\CreatePromotionData;
 use App\Modules\Promotions\Application\DTOs\ListPromotionsFilter;
 use App\Modules\Promotions\Application\DTOs\UpdatePromotionData;
-use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Contracts\Pagination\Paginator;
 
 interface PromotionRepository
 {
-    public function listForSupplier(int $supplierId, ListPromotionsFilter $filter): LengthAwarePaginator;
+    public function listForSupplier(int $supplierId, ListPromotionsFilter $filter): Paginator;
 
     public function hasActiveOverlap(int $supplierId, CreatePromotionData $data, ?string $excludeUuid = null): bool;
 
