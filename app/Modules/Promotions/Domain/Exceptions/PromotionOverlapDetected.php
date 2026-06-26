@@ -15,4 +15,9 @@ class PromotionOverlapDetected extends RuntimeException
     {
         return new self('A volume promotion already overlaps the given date range for this supplier.');
     }
+
+    public static function forVehicleVolume(): self
+    {
+        return new self('A vehicle volume promotion already overlaps the given date range for this supplier.');
+    }
 }

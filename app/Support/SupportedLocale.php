@@ -14,7 +14,7 @@ class SupportedLocale
     /**
      * @return array<string, array<string, string>>
      */
-    public static function all(): array
+    public static function values(): array
     {
         return self::$supportedLocales ??= app(LocaleService::class)->getSupportedLocales();
     }
@@ -24,7 +24,7 @@ class SupportedLocale
      */
     public static function options(): array
     {
-        return collect(self::all())
+        return collect(self::values())
             ->mapWithKeys(fn (array $locale, string $code): array => [$code => $locale['name'] ?? $code])
             ->all();
     }
@@ -34,7 +34,7 @@ class SupportedLocale
      */
     public static function menuOptions(): array
     {
-        return collect(self::all())
+        return collect(self::values())
             ->mapWithKeys(fn (array $locale, string $code): array => [$code => __("locales.{$code}")])
             ->all();
     }
@@ -54,7 +54,7 @@ class SupportedLocale
 
     public static function isSupported(?string $locale): bool
     {
-        return is_string($locale) && array_key_exists($locale, self::all());
+        return is_string($locale) && array_key_exists($locale, self::values());
     }
 
     public static function normalize(?string $locale): string

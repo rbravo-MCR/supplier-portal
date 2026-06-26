@@ -8,12 +8,17 @@ class UpdatePromotionData
         public readonly ?string $name = null,
         public readonly ?string $discountType = null,
         public readonly ?float $discountValue = null,
+        public readonly ?int $minRentalDays = null,
+        public readonly ?int $freeDays = null,
+        public readonly ?int $minVehicleCount = null,
         public readonly ?string $validFrom = null,
         public readonly ?string $validTo = null,
+        public readonly ?string $status = null,
         public readonly ?bool $appliesToAllOffices = null,
         public readonly ?bool $appliesToAllCategories = null,
         public readonly ?array $officeIds = null,
         public readonly ?array $categoryIds = null,
         public readonly ?array $tiers = null,
+        public readonly ?array $vehicleTiers = null,
     ) {}
 }

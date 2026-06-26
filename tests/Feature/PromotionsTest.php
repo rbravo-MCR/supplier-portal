@@ -10,7 +10,9 @@ use App\Modules\Promotions\Application\UseCases\DeletePromotion;
 use App\Modules\Promotions\Application\UseCases\TogglePromotionStatus;
 use App\Modules\Promotions\Domain\Exceptions\InvalidPromotionData;
 use App\Modules\Promotions\Domain\Exceptions\PromotionOverlapDetected;
+use App\Modules\Promotions\Domain\Rules\FreeDaysMustBeValid;
 use App\Modules\Promotions\Domain\Rules\PromotionDatesMustBeValid;
+use App\Modules\Promotions\Domain\Rules\VehicleVolumeTiersMustBeValid;
 use App\Modules\Promotions\Domain\Rules\VolumeTierDaysMustBeValid;
 
 test('supplier can create a seasonal promotion', function () {
@@ -27,8 +29,12 @@ test('supplier can create a seasonal promotion', function () {
         type: 'seasonal',
         discountType: 'percentage',
         discountValue: 15.00,
+        minRentalDays: null,
+        freeDays: null,
+        minVehicleCount: 1,
         validFrom: '2026-07-01',
         validTo: '2026-07-31',
+        status: 'active',
         appliesToAllOffices: true,
         appliesToAllCategories: true,
         officeIds: [],
@@ -65,8 +71,12 @@ test('supplier can create a volume promotion with tiers', function () {
         type: 'volume',
         discountType: 'percentage',
         discountValue: 5.00,
+        minRentalDays: null,
+        freeDays: null,
+        minVehicleCount: 1,
         validFrom: '2026-01-01',
         validTo: '2026-12-31',
+        status: 'active',
         appliesToAllOffices: true,
         appliesToAllCategories: true,
         officeIds: [],
@@ -118,8 +128,12 @@ test('seasonal promotions must not overlap for the same supplier', function () {
         type: 'seasonal',
         discountType: 'percentage',
         discountValue: 10.00,
+        minRentalDays: null,
+        freeDays: null,
+        minVehicleCount: 1,
         validFrom: '2026-07-15',
         validTo: '2026-08-15',
+        status: 'active',
         appliesToAllOffices: true,
         appliesToAllCategories: true,
         officeIds: [],
@@ -223,4 +237,120 @@ test('promotions page is accessible to supplier users', function () {
         ->get(route('portal.promotions'))
         ->assertOk()
         ->assertSee('Promociones');
+});
+
+test('supplier can create a free days promotion', function () {
+    $supplier = Supplier::factory()->create();
+    $user = User::factory()->create([
+        'role' => 'supplier_admin',
+        'supplier_id' => $supplier->id,
+    ]);
+
+    $this->actingAs($user);
+
+    $promotion = app(CreatePromotion::class)->handle(new CreatePromotionData(
+        name: 'Renta 4 paga 3',
+        type: 'seasonal',
+        discountType: 'free_days',
+        discountValue: 0,
+        minRentalDays: 4,
+        freeDays: 1,
+        minVehicleCount: 1,
+        validFrom: '2026-07-01',
+        validTo: '2026-07-31',
+        status: 'active',
+        appliesToAllOffices: true,
+        appliesToAllCategories: true,
+        officeIds: [],
+        categoryIds: [],
+        tiers: [],
+        createdBy: $user->id,
+    ));
+
+    expect($promotion->discount_type)->toBe('free_days')
+        ->and($promotion->min_rental_days)->toBe(4)
+        ->and($promotion->free_days)->toBe(1);
+});
+
+test('supplier can create a vehicle volume promotion with tiers', function () {
+    $supplier = Supplier::factory()->create();
+    $user = User::factory()->create([
+        'role' => 'supplier_admin',
+        'supplier_id' => $supplier->id,
+    ]);
+
+    $this->actingAs($user);
+
+    $promotion = app(CreatePromotion::class)->handle(new CreatePromotionData(
+        name: 'Descuento por flota',
+        type: 'vehicle_volume',
+        discountType: 'percentage',
+        discountValue: 0,
+        minRentalDays: null,
+        freeDays: null,
+        minVehicleCount: 1,
+        validFrom: '2026-01-01',
+        validTo: '2026-12-31',
+        status: 'active',
+        appliesToAllOffices: true,
+        appliesToAllCategories: true,
+        officeIds: [],
+        categoryIds: [],
+        tiers: [],
+        vehicleTiers: [
+            ['min_vehicles' => 3, 'max_vehicles' => 5, 'discount_value' => 10.00],
+            ['min_vehicles' => 6, 'max_vehicles' => null, 'discount_value' => 15.00],
+        ],
+        createdBy: $user->id,
+    ));
+
+    expect($promotion->type)->toBe('vehicle_volume')
+        ->and($promotion->vehicleTiers)->toHaveCount(2);
+
+    $this->assertDatabaseHas('promotion_vehicle_tiers', [
+        'promotion_id' => $promotion->id,
+        'min_vehicles' => 3,
+        'max_vehicles' => 5,
+        'discount_value' => '10.00',
+    ]);
+});
+
+test('free days must be valid', function () {
+    $rule = new FreeDaysMustBeValid;
+
+    expect(fn () => $rule->validate(3, 0))
+        ->toThrow(InvalidPromotionData::class, 'Free days must be at least 1.');
+
+    expect(fn () => $rule->validate(0, 1))
+        ->toThrow(InvalidPromotionData::class, 'Minimum rental days must be at least 1.');
+
+    expect(fn () => $rule->validate(3, 3))
+        ->toThrow(InvalidPromotionData::class, 'Free days must be less than minimum rental days.');
+
+    expect($rule->validate(4, 1))->toBeTrue();
+});
+
+test('vehicle volume tiers must be valid', function () {
+    $rule = new VehicleVolumeTiersMustBeValid;
+
+    expect(fn () => $rule->validate([]))
+        ->toThrow(InvalidPromotionData::class, 'Vehicle volume promotions require at least one discount tier.');
+
+    expect(fn () => $rule->validate([
+        ['min_vehicles' => 0, 'max_vehicles' => 5, 'discount_value' => 10],
+    ]))->toThrow(InvalidPromotionData::class, 'minimum vehicles must be at least 1');
+
+    expect(fn () => $rule->validate([
+        ['min_vehicles' => 7, 'max_vehicles' => 5, 'discount_value' => 10],
+    ]))->toThrow(InvalidPromotionData::class, 'maximum vehicles must be greater than or equal to minimum vehicles');
+
+    expect(fn () => $rule->validate([
+        ['min_vehicles' => 3, 'max_vehicles' => 5, 'discount_value' => 10],
+        ['min_vehicles' => 4, 'max_vehicles' => 8, 'discount_value' => 15],
+    ]))->toThrow(InvalidPromotionData::class, 'vehicle ranges overlap with a previous tier');
+
+    expect($rule->validate([
+        ['min_vehicles' => 3, 'max_vehicles' => 5, 'discount_value' => 10],
+        ['min_vehicles' => 6, 'max_vehicles' => null, 'discount_value' => 15],
+    ]))->toBeTrue();
 });

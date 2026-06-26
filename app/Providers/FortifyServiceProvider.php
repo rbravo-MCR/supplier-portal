@@ -53,6 +53,7 @@ class FortifyServiceProvider extends ServiceProvider
             $username = Str::lower((string) $request->input(Fortify::username()));
 
             $user = User::query()
+                ->with(['portalRole', 'supplier'])
                 ->where('username', $username)
                 ->first();
 

@@ -27,6 +27,9 @@ class PromotionFactory extends Factory
             'type' => 'seasonal',
             'discount_type' => 'percentage',
             'discount_value' => 15.00,
+            'min_rental_days' => null,
+            'free_days' => null,
+            'min_vehicle_count' => 1,
             'valid_from' => now()->toDateString(),
             'valid_to' => now()->addDays(30)->toDateString(),
             'status' => 'active',
@@ -53,6 +56,16 @@ class PromotionFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'type' => 'volume',
+        ]);
+    }
+
+    /**
+     * Indicate that the promotion is vehicle volume-based.
+     */
+    public function vehicleVolume(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'type' => 'vehicle_volume',
         ]);
     }
 

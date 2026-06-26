@@ -12,5 +12,6 @@ class CalculatePriceData
         public readonly string $dropoffAt,
         public readonly float $baseAmount,
         public readonly string $currency,
+        public readonly int $vehicleCount = 1,
     ) {}
 }

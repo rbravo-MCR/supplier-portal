@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Str;
 
-#[Fillable(['uuid', 'supplier_id', 'name', 'type', 'discount_type', 'discount_value', 'valid_from', 'valid_to', 'status', 'applies_to_all_offices', 'applies_to_all_categories', 'created_by'])]
+#[Fillable(['uuid', 'supplier_id', 'name', 'type', 'discount_type', 'discount_value', 'min_rental_days', 'free_days', 'min_vehicle_count', 'valid_from', 'valid_to', 'status', 'applies_to_all_offices', 'applies_to_all_categories', 'created_by'])]
 class Promotion extends Model
 {
     /** @use HasFactory<PromotionFactory> */
@@ -93,6 +93,16 @@ class Promotion extends Model
     }
 
     /**
+     * Get the vehicle volume tiers for this promotion.
+     *
+     * @return HasMany<PromotionVehicleTier, $this>
+     */
+    public function vehicleTiers(): HasMany
+    {
+        return $this->hasMany(PromotionVehicleTier::class)->orderBy('min_vehicles');
+    }
+
+    /**
      * Get the route key for public URLs.
      */
     public function getRouteKeyName(): string
@@ -149,6 +159,17 @@ class Promotion extends Model
     }
 
     /**
+     * Scope a query to only include vehicle volume promotions.
+     *
+     * @param  Builder<Promotion>  $query
+     * @return Builder<Promotion>
+     */
+    public function scopeVehicleVolume($query)
+    {
+        return $query->where('type', 'vehicle_volume');
+    }
+
+    /**
      * Scope a query to only include promotions valid for a given date.
      *
      * @param  Builder<Promotion>  $query
@@ -156,8 +177,8 @@ class Promotion extends Model
      */
     public function scopeValidForDate($query, string $date)
     {
-        return $query->where('valid_from', '<=', $date)
-            ->where('valid_to', '>=', $date);
+        return $query->whereDate('valid_from', '<=', $date)
+            ->whereDate('valid_to', '>=', $date);
     }
 
     /**
@@ -183,6 +204,9 @@ class Promotion extends Model
     {
         return [
             'discount_value' => 'decimal:2',
+            'min_rental_days' => 'integer',
+            'free_days' => 'integer',
+            'min_vehicle_count' => 'integer',
             'valid_from' => 'date',
             'valid_to' => 'date',
             'applies_to_all_offices' => 'boolean',

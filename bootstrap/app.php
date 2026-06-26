@@ -1,14 +1,19 @@
 <?php
 
 use App\Http\Middleware\EnsurePrimaryDatabaseIsAvailable;
+use App\Http\Middleware\SecurityHeaders;
 use App\Http\Middleware\SetLocale;
 use App\Http\Middleware\SetTeamUrlDefaults;
 use App\Shared\Support\IncidentId;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -39,6 +44,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->web(append: [
             SetLocale::class,
             SetTeamUrlDefaults::class,
+            SecurityHeaders::class,
+        ]);
+
+        $middleware->api(append: [
+            SecurityHeaders::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -47,6 +57,15 @@ return Application::configure(basePath: dirname(__DIR__))
         );
 
         $exceptions->render(function (Throwable $exception, Request $request): ?Response {
+            if (
+                $exception instanceof AuthenticationException
+                || $exception instanceof AuthorizationException
+                || $exception instanceof HttpExceptionInterface
+                || $exception instanceof ValidationException
+            ) {
+                return null;
+            }
+
             if (config('app.debug')) {
                 return null;
             }

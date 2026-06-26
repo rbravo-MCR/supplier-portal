@@ -18,7 +18,7 @@ beforeEach(function () {
     App::setLocale('es');
 });
 
-test('imports page shows the latest five uploads', function () {
+test('imports page shows the latest upload', function () {
     $supplier = Supplier::factory()->create(['code' => 'DEMO']);
     $user = User::factory()->create([
         'role' => 'supplier_admin',
@@ -38,9 +38,9 @@ test('imports page shows the latest five uploads', function () {
     $this->actingAs($user)
         ->get(route('portal.imports'))
         ->assertOk()
-        ->assertSee('Últimas 5 cargas')
+        ->assertSee('Última carga')
         ->assertSee('rates-5.xlsx')
-        ->assertSee('rates-1.xlsx')
+        ->assertDontSee('rates-4.xlsx')
         ->assertDontSee('rates-0.xlsx');
 });
 
@@ -228,7 +228,7 @@ test('localized supplier templates are generated for every supported locale', fu
     $supplier = Supplier::factory()->create(['code' => 'DEMO']);
     $paths = app(RateImportTemplateSpreadsheet::class)->ensureLocalizedTemplates($supplier);
 
-    expect(array_keys($paths))->toBe(['es', 'en', 'pt', 'fr']);
+    expect(array_keys($paths))->toBe(['es', 'en', 'pt', 'fr', 'it', 'zh', 'ja']);
 
     foreach ($paths as $locale => $path) {
         expect($path)->toEndWith("supplier-prices-{$locale}.xlsx")
@@ -309,7 +309,7 @@ test('imports page shows translated error summary and downloadable error report'
 
     Livewire::actingAs($user)
         ->test('pages::imports')
-        ->set('file', excelUpload([
+        ->set('file', supplierExcelUpload($supplier, [
             ['Vehicle', 'Category code', 'ACRISS code', 'Price', 'Currency', 'Valid from', 'Valid until'],
             ['SUV', 'SUV', 'IFAR', '', 'USD', '2026-06-05', '2026-07-05'],
         ]))
@@ -334,7 +334,7 @@ test('imports page validates the expected excel format before upload', function 
 
     Livewire::actingAs($user)
         ->test('pages::imports')
-        ->set('file', excelUpload([
+        ->set('file', supplierExcelUpload($supplier, [
             ['office_code', 'vehicle_class', 'category_code', 'acriss_code', 'rate_plan_code', 'currency', 'base_price', 'valid_from', 'valid_to'],
             ['CUN', 'SUV', 'SUV', 'IFAR', 'STD', 'USD', '125.50', '2026-06-05', '2026-07-05'],
         ]))
@@ -344,6 +344,63 @@ test('imports page validates the expected excel format before upload', function 
         ->assertSee('type="submit"', false)
         ->assertDontSee('wire:click="commitImport"')
         ->assertSee('data-test="import-processing-overlay"', false);
+});
+
+test('imports page rejects xlsx files that were not generated for a supplier', function () {
+    $supplier = Supplier::factory()->create();
+    $user = User::factory()->create([
+        'role' => 'supplier_admin',
+        'supplier_id' => $supplier->id,
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::imports')
+        ->set('file', excelUpload([
+            ['office_code', 'vehicle_class', 'category_code', 'acriss_code', 'rate_plan_code', 'currency', 'base_price', 'valid_from', 'valid_to'],
+            ['CUN', 'SUV', 'SUV', 'IFAR', 'STD', 'USD', '125.50', '2026-06-05', '2026-07-05'],
+        ]))
+        ->assertSet('formatIsValid', false)
+        ->assertHasErrors('file')
+        ->assertSee('Solo se permite cargar la plantilla Excel generada para este proveedor.');
+});
+
+test('imports page rejects supplier templates generated for another supplier', function () {
+    $supplier = Supplier::factory()->create();
+    $otherSupplier = Supplier::factory()->create();
+    $user = User::factory()->create([
+        'role' => 'supplier_admin',
+        'supplier_id' => $supplier->id,
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::imports')
+        ->set('file', supplierExcelUpload($otherSupplier, [
+            ['office_code', 'vehicle_class', 'category_code', 'acriss_code', 'rate_plan_code', 'currency', 'base_price', 'valid_from', 'valid_to'],
+            ['CUN', 'SUV', 'SUV', 'IFAR', 'STD', 'USD', '125.50', '2026-06-05', '2026-07-05'],
+        ]))
+        ->assertSet('formatIsValid', false)
+        ->assertHasErrors('file')
+        ->assertSee('El archivo Excel no corresponde al proveedor seleccionado.');
+});
+
+test('supplier user cannot import prices by tampering the selected supplier id', function () {
+    $supplier = Supplier::factory()->create();
+    $otherSupplier = Supplier::factory()->create();
+    $user = User::factory()->create([
+        'role' => 'supplier_admin',
+        'supplier_id' => $supplier->id,
+    ]);
+
+    Livewire::actingAs($user)
+        ->test('pages::imports')
+        ->set('supplierId', $otherSupplier->id)
+        ->assertSet('supplierId', $supplier->id)
+        ->set('file', supplierExcelUpload($otherSupplier, [
+            ['office_code', 'vehicle_class', 'category_code', 'acriss_code', 'rate_plan_code', 'currency', 'base_price', 'valid_from', 'valid_to'],
+            ['CUN', 'SUV', 'SUV', 'IFAR', 'STD', 'USD', '125.50', '2026-06-05', '2026-07-05'],
+        ]))
+        ->assertSet('formatIsValid', false)
+        ->assertHasErrors('file');
 });
 
 test('imports page rejects excel files with the wrong format', function () {
@@ -361,7 +418,7 @@ test('imports page rejects excel files with the wrong format', function () {
         ]))
         ->assertSet('formatIsValid', false)
         ->assertHasErrors('file')
-        ->assertSee('Faltan columnas');
+        ->assertSee('Solo se permite cargar la plantilla Excel generada para este proveedor.');
 });
 
 test('imports page uploads validated excel files into staging rows and publishes rates', function () {
@@ -379,7 +436,7 @@ test('imports page uploads validated excel files into staging rows and publishes
 
     Livewire::actingAs($user)
         ->test('pages::imports')
-        ->set('file', excelUpload([
+        ->set('file', supplierExcelUpload($supplier, [
             ['office_code', 'vehicle_class', 'category_code', 'acriss_code', 'rate_plan_code', 'currency', 'base_price', 'valid_from', 'valid_to'],
             ['CUN', 'SUV', 'SUV', 'IFAR', 'STD', 'USD', '125.50', '2026-06-05', '2026-07-05'],
             ['MEX', 'COMPACT', 'COMPACT', 'CDAR', 'WEEKEND', 'USD', '90.00', '46204', '46234'],
@@ -389,11 +446,11 @@ test('imports page uploads validated excel files into staging rows and publishes
         ->assertSet('lastImportedRows', 2)
         ->assertSet('successMessage', 'Precios cargados correctamente. 2 filas guardadas.')
         ->assertSee('data-test="import-success"', false)
-        ->assertSee('rates.xlsx');
+        ->assertSee("supplier-prices-{$supplier->code}.xlsx");
 
     $this->assertDatabaseHas('rate_imports', [
         'supplier_id' => $supplier->id,
-        'original_filename' => 'rates.xlsx',
+        'original_filename' => "supplier-prices-{$supplier->code}.xlsx",
         'status' => 'published',
         'total_rows' => 2,
         'valid_rows' => 2,
@@ -451,6 +508,17 @@ function excelUpload(array $rows): UploadedFile
 /**
  * @param  list<list<string>>  $rows
  */
+function supplierExcelUpload(Supplier $supplier, array $rows): UploadedFile
+{
+    return UploadedFile::fake()->createWithContent(
+        "supplier-prices-{$supplier->code}.xlsx",
+        excelContent($rows, $supplier),
+    );
+}
+
+/**
+ * @param  list<list<string>>  $rows
+ */
 function tempExcelPath(array $rows): string
 {
     $path = tempnam(sys_get_temp_dir(), 'xlsx');
@@ -493,7 +561,7 @@ function excelSharedStrings(string $path): array
 /**
  * @param  list<list<string>>  $rows
  */
-function excelContent(array $rows): string
+function excelContent(array $rows, ?Supplier $supplier = null): string
 {
     $path = tempnam(sys_get_temp_dir(), 'xlsx');
     $archive = new ZipArchive;
@@ -555,6 +623,28 @@ XML);
         ->implode('');
 
     $archive->addFromString('xl/worksheets/sheet1.xml', '<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'.$sheetRows.'</sheetData></worksheet>');
+
+    if ($supplier instanceof Supplier) {
+        $metadata = [
+            'type' => 'supplier_portal_rate_template',
+            'supplier_id' => $supplier->id,
+            'supplier_uuid' => $supplier->uuid,
+            'supplier_code' => $supplier->code,
+        ];
+        $metadata['signature'] = hash_hmac(
+            'sha256',
+            implode('|', [
+                $metadata['type'],
+                (string) $metadata['supplier_id'],
+                (string) $metadata['supplier_uuid'],
+                (string) $metadata['supplier_code'],
+            ]),
+            (string) config('app.key'),
+        );
+
+        $archive->addFromString('xl/supplier-portal-template.json', json_encode($metadata, JSON_THROW_ON_ERROR));
+    }
+
     $archive->close();
 
     $content = file_get_contents($path);

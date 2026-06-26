@@ -2,7 +2,7 @@
 
 namespace App\Modules\Promotions\Application\DTOs;
 
-class ListPromotionsFilter
+class ListPromotionsFilterData
 {
     public function __construct(
         public readonly ?string $type = null,

@@ -31,6 +31,7 @@ class CalculatePromotionRequest extends FormRequest
             'dropoff_at' => ['required', 'date', 'after:pickup_at'],
             'base_amount' => ['required', 'numeric', 'min:0.01'],
             'currency' => ['required', 'string', 'size:3'],
+            'vehicle_count' => ['sometimes', 'integer', 'min:1'],
         ];
     }
 }

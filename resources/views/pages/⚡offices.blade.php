@@ -509,6 +509,12 @@ new #[Title('Oficinas')] class extends Component {
     #[Computed]
     public function offices(): Paginator
     {
+        $supplierId = Auth::user()->supplier_id;
+
+        if (! $supplierId) {
+            return new \Illuminate\Pagination\Paginator([], 10);
+        }
+
         return Office::query()
             ->with([
                 'supplier:id,name,code',

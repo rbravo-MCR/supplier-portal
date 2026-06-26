@@ -10,6 +10,9 @@ test('i18n missing command confirms supported locales are complete', function ()
         ->expectsOutput('en: no missing keys')
         ->expectsOutput('pt: no missing keys')
         ->expectsOutput('fr: no missing keys')
+        ->expectsOutput('it: no missing keys')
+        ->expectsOutput('zh: no missing keys')
+        ->expectsOutput('ja: no missing keys')
         ->assertSuccessful();
 });
 

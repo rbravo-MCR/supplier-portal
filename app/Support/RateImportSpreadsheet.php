@@ -59,6 +59,17 @@ class RateImportSpreadsheet
     }
 
     /**
+     * @return array{headers: list<string>, rows: list<array<string, mixed>>, missing_headers: list<string>, errors: list<array{row: int, field: string, message: string}>, summary: array{processed: int, successful: int, failed: int}}
+     */
+    public function readForSupplier(string $path, int $supplierId, ?string $locale = null): array
+    {
+        $locale = SupportedLocale::normalize($locale ?? App::currentLocale());
+        $this->assertGeneratedForSupplier($path, $supplierId, $locale);
+
+        return $this->read($path, $locale);
+    }
+
+    /**
      * @param  list<list<string>>  $rows
      * @return array{0: list<string>, 1: list<list<string>>, 2: int}
      */
@@ -285,5 +296,51 @@ class RateImportSpreadsheet
         $translationKey = $column['translation_key'] ?? null;
 
         return is_string($translationKey) ? __($translationKey, locale: $locale) : $key;
+    }
+
+    protected function assertGeneratedForSupplier(string $path, int $supplierId, string $locale): void
+    {
+        $archive = new ZipArchive;
+
+        if ($archive->open($path) !== true) {
+            throw new RuntimeException(__('No se pudo leer el archivo Excel.', locale: $locale));
+        }
+
+        $metadata = $archive->getFromName('xl/supplier-portal-template.json');
+        $archive->close();
+
+        if ($metadata === false) {
+            throw new RuntimeException(__('Solo se permite cargar la plantilla Excel generada para este proveedor.', locale: $locale));
+        }
+
+        $decoded = json_decode($metadata, true);
+
+        if (! is_array($decoded) || ! $this->metadataIsValid($decoded, $supplierId)) {
+            throw new RuntimeException(__('El archivo Excel no corresponde al proveedor seleccionado.', locale: $locale));
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $metadata
+     */
+    protected function metadataIsValid(array $metadata, int $supplierId): bool
+    {
+        $expectedSignature = hash_hmac(
+            'sha256',
+            implode('|', [
+                (string) ($metadata['type'] ?? ''),
+                (string) ($metadata['supplier_id'] ?? ''),
+                (string) ($metadata['supplier_uuid'] ?? ''),
+                (string) ($metadata['supplier_code'] ?? ''),
+            ]),
+            (string) config('app.key'),
+        );
+
+        return ($metadata['type'] ?? null) === 'supplier_portal_rate_template'
+            && (int) ($metadata['supplier_id'] ?? 0) === $supplierId
+            && is_string($metadata['supplier_uuid'] ?? null)
+            && is_string($metadata['supplier_code'] ?? null)
+            && is_string($metadata['signature'] ?? null)
+            && hash_equals($expectedSignature, $metadata['signature']);
     }
 }

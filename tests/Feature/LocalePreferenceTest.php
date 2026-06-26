@@ -233,7 +233,7 @@ test('users cannot update preferred locale to unsupported values', function () {
     $this->actingAs($user)
         ->from(route('admin.dashboard'))
         ->post(route('locale.update'), [
-            'locale' => 'it',
+            'locale' => 'de',
         ])
         ->assertSessionHasErrors('locale');
 

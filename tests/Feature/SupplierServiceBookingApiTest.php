@@ -1,6 +1,8 @@
 <?php
 
 use App\Models\Supplier;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 
 test('supplier service booking endpoint validates requests without token', function () {
     $this->postJson('/api/supplier-service/bookings', [])
@@ -54,6 +56,42 @@ test('supplier service booking endpoint is idempotent by supplier and reservatio
         'reservation_code' => 'OUTLET-API-001',
         'customer_name' => 'Cliente API Actualizado',
     ]);
+});
+
+test('supplier service bookings are unique by supplier and reservation code at the database layer', function () {
+    $supplier = Supplier::factory()->create(['code' => 'DEMO']);
+
+    DB::table('bookings')->insert([
+        'uuid' => fake()->uuid(),
+        'supplier_id' => $supplier->id,
+        'reservation_code' => 'OUTLET-API-001',
+        'customer_name' => 'Cliente API',
+        'pickup_office_code' => 'MEX01',
+        'dropoff_office_code' => 'MEX01',
+        'pickup_at' => '2026-06-10T10:00:00-06:00',
+        'dropoff_at' => '2026-06-12T18:00:00-06:00',
+        'total_amount' => 275.50,
+        'currency' => 'USD',
+        'status' => 'pending',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    expect(fn () => DB::table('bookings')->insert([
+        'uuid' => fake()->uuid(),
+        'supplier_id' => $supplier->id,
+        'reservation_code' => 'OUTLET-API-001',
+        'customer_name' => 'Cliente API Duplicado',
+        'pickup_office_code' => 'MEX01',
+        'dropoff_office_code' => 'MEX01',
+        'pickup_at' => '2026-06-10T10:00:00-06:00',
+        'dropoff_at' => '2026-06-12T18:00:00-06:00',
+        'total_amount' => 275.50,
+        'currency' => 'USD',
+        'status' => 'pending',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]))->toThrow(QueryException::class);
 });
 
 /**

@@ -34,7 +34,7 @@ test('health endpoints are public when HEALTH_SECRET is not configured', functio
 });
 
 test('health endpoint returns aggregate status', function () {
-    $this->getJson('/health')
+    $this->withToken((string) config('app.health_secret'))->getJson('/health')
         ->assertOk()
         ->assertJsonStructure([
             'status',
@@ -50,7 +50,7 @@ test('health endpoint returns aggregate status', function () {
 });
 
 test('individual health endpoints return component status', function (string $endpoint) {
-    $this->getJson($endpoint)
+    $this->withToken((string) config('app.health_secret'))->getJson($endpoint)
         ->assertOk()
         ->assertJsonStructure(['status']);
 })->with([
@@ -71,7 +71,7 @@ test('health checks do not expose technical exception details', function () {
         ->once()
         ->andThrow(new RuntimeException('SQLSTATE[08006]: failed at /internal/path for secret-host'));
 
-    $this->getJson('/health/db')
+    $this->withToken((string) config('app.health_secret'))->getJson('/health/db')
         ->assertOk()
         ->assertJson([
             'status' => 'down',
@@ -87,7 +87,7 @@ test('store and forward health degrades when pending operations exceed the runbo
         ->count(101)
         ->create();
 
-    $this->getJson('/health/outbox')
+    $this->withToken((string) config('app.health_secret'))->getJson('/health/outbox')
         ->assertOk()
         ->assertJson([
             'status' => 'degraded',
@@ -106,7 +106,7 @@ test('failed jobs health degrades when the recovery validation is not clean', fu
         'failed_at' => now(),
     ]);
 
-    $this->getJson('/health/failed-jobs')
+    $this->withToken((string) config('app.health_secret'))->getJson('/health/failed-jobs')
         ->assertOk()
         ->assertJson([
             'status' => 'degraded',

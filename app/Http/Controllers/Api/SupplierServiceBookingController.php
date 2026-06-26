@@ -9,6 +9,7 @@ use App\Models\Booking;
 use App\Models\Supplier;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class SupplierServiceBookingController extends Controller
 {
@@ -19,15 +20,15 @@ class SupplierServiceBookingController extends Controller
     {
         $validated = $request->validated();
 
-        $booking = DB::transaction(function () use ($validated): Booking {
+        [$booking, $created] = DB::transaction(function () use ($validated): array {
             $supplier = Supplier::query()
                 ->where('code', $validated['supplier_code'])
                 ->firstOrFail();
 
-            $booking = Booking::query()
+            $created = ! Booking::query()
                 ->where('supplier_id', $supplier->id)
                 ->where('reservation_code', $validated['reservation_code'])
-                ->first();
+                ->exists();
 
             $attributes = [
                 'supplier_id' => $supplier->id,
@@ -46,20 +47,38 @@ class SupplierServiceBookingController extends Controller
                 ],
             ];
 
-            if ($booking instanceof Booking) {
-                $booking->update($attributes);
+            $now = now();
 
-                return $booking->refresh();
-            }
-
-            return Booking::query()->create([
+            DB::table('bookings')->upsert([
                 ...$attributes,
+                'uuid' => (string) Str::uuid(),
                 'status' => 'pending',
+                'metadata' => json_encode($attributes['metadata'], JSON_THROW_ON_ERROR),
+                'created_at' => $now,
+                'updated_at' => $now,
+            ], ['supplier_id', 'reservation_code'], [
+                'customer_name',
+                'vehicle_class',
+                'pickup_office_code',
+                'dropoff_office_code',
+                'pickup_at',
+                'dropoff_at',
+                'total_amount',
+                'currency',
+                'metadata',
+                'updated_at',
             ]);
+
+            $booking = Booking::query()
+                ->where('supplier_id', $supplier->id)
+                ->where('reservation_code', $validated['reservation_code'])
+                ->firstOrFail();
+
+            return [$booking, $created];
         });
 
         return (new BookingResource($booking->load('supplier:id,name,code')))
             ->response()
-            ->setStatusCode($booking->wasRecentlyCreated ? 201 : 200);
+            ->setStatusCode($created ? 201 : 200);
     }
 }

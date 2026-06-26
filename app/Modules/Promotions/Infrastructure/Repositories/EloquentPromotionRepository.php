@@ -5,18 +5,18 @@ namespace App\Modules\Promotions\Infrastructure\Repositories;
 use App\Models\Promotion;
 use App\Modules\Promotions\Application\Contracts\PromotionRepository;
 use App\Modules\Promotions\Application\DTOs\CreatePromotionData;
-use App\Modules\Promotions\Application\DTOs\ListPromotionsFilter;
+use App\Modules\Promotions\Application\DTOs\ListPromotionsFilterData;
 use App\Modules\Promotions\Application\DTOs\UpdatePromotionData;
 use Illuminate\Contracts\Pagination\Paginator;
 use Illuminate\Database\Eloquent\Builder;
 
 class EloquentPromotionRepository implements PromotionRepository
 {
-    public function listForSupplier(int $supplierId, ListPromotionsFilter $filter): Paginator
+    public function listForSupplier(?int $supplierId, ListPromotionsFilterData $filter): Paginator
     {
         return Promotion::query()
-            ->with(['offices:id,name,code', 'vehicleCategories:id,name,code', 'tiers'])
-            ->forSupplier($supplierId)
+            ->with(['offices:id,name,code', 'vehicleCategories:id,name,code', 'tiers', 'vehicleTiers'])
+            ->when($supplierId !== null, fn (Builder $query) => $query->forSupplier($supplierId))
             ->when($filter->type !== null, fn (Builder $query) => $query->where('type', $filter->type))
             ->when($filter->status !== null, fn (Builder $query) => $query->where('status', $filter->status))
             ->when($filter->search !== null && $filter->search !== '', fn (Builder $query) => $query->search($filter->search))
@@ -54,9 +54,12 @@ class EloquentPromotionRepository implements PromotionRepository
             'type' => $data->type,
             'discount_type' => $data->discountType,
             'discount_value' => $data->discountValue,
+            'min_rental_days' => $data->minRentalDays,
+            'free_days' => $data->freeDays,
+            'min_vehicle_count' => $data->minVehicleCount,
             'valid_from' => $data->validFrom,
             'valid_to' => $data->validTo,
-            'status' => 'active',
+            'status' => $data->status,
             'applies_to_all_offices' => $data->appliesToAllOffices,
             'applies_to_all_categories' => $data->appliesToAllCategories,
             'created_by' => $data->createdBy,
@@ -80,7 +83,17 @@ class EloquentPromotionRepository implements PromotionRepository
             }
         }
 
-        return $promotion->fresh(['offices', 'vehicleCategories', 'tiers']);
+        if ($data->type === 'vehicle_volume' && $data->vehicleTiers !== null && ! empty($data->vehicleTiers)) {
+            foreach ($data->vehicleTiers as $tier) {
+                $promotion->vehicleTiers()->create([
+                    'min_vehicles' => $tier['min_vehicles'],
+                    'max_vehicles' => $tier['max_vehicles'] ?? null,
+                    'discount_value' => $tier['discount_value'],
+                ]);
+            }
+        }
+
+        return $promotion->fresh(['offices', 'vehicleCategories', 'tiers', 'vehicleTiers']);
     }
 
     public function update(Promotion $promotion, UpdatePromotionData $data): Promotion
@@ -93,6 +106,15 @@ class EloquentPromotionRepository implements PromotionRepository
         if ($data->discountType !== null) {
             $fields['discount_type'] = $data->discountType;
         }
+        if ($data->minRentalDays !== null) {
+            $fields['min_rental_days'] = $data->minRentalDays;
+        }
+        if ($data->freeDays !== null) {
+            $fields['free_days'] = $data->freeDays;
+        }
+        if ($data->minVehicleCount !== null) {
+            $fields['min_vehicle_count'] = $data->minVehicleCount;
+        }
         if ($data->discountValue !== null) {
             $fields['discount_value'] = $data->discountValue;
         }
@@ -101,6 +123,9 @@ class EloquentPromotionRepository implements PromotionRepository
         }
         if ($data->validTo !== null) {
             $fields['valid_to'] = $data->validTo;
+        }
+        if ($data->status !== null) {
+            $fields['status'] = $data->status;
         }
         if ($data->appliesToAllOffices !== null) {
             $fields['applies_to_all_offices'] = $data->appliesToAllOffices;
@@ -144,7 +169,18 @@ class EloquentPromotionRepository implements PromotionRepository
             }
         }
 
-        return $promotion->fresh(['offices', 'vehicleCategories', 'tiers']);
+        if ($promotion->type === 'vehicle_volume' && $data->vehicleTiers !== null) {
+            $promotion->vehicleTiers()->delete();
+            foreach ($data->vehicleTiers as $tier) {
+                $promotion->vehicleTiers()->create([
+                    'min_vehicles' => $tier['min_vehicles'],
+                    'max_vehicles' => $tier['max_vehicles'] ?? null,
+                    'discount_value' => $tier['discount_value'],
+                ]);
+            }
+        }
+
+        return $promotion->fresh(['offices', 'vehicleCategories', 'tiers', 'vehicleTiers']);
     }
 
     public function delete(Promotion $promotion): void
@@ -152,6 +188,7 @@ class EloquentPromotionRepository implements PromotionRepository
         $promotion->offices()->detach();
         $promotion->vehicleCategories()->detach();
         $promotion->tiers()->delete();
+        $promotion->vehicleTiers()->delete();
         $promotion->delete();
     }
 }

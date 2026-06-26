@@ -92,7 +92,7 @@ test('pricing form publishes a new vehicle rate', function () {
         ->assertHasNoErrors()
         ->assertSee('SUV')
         ->assertSee('IFAR')
-        ->assertSee('199.99');
+        ->assertSee('USD 199,99');
 
     $this->assertDatabaseHas('rates', [
         'supplier_id' => $supplier->id,

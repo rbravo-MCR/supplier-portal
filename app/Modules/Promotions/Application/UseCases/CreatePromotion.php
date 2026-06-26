@@ -8,7 +8,9 @@ use App\Models\Promotion;
 use App\Modules\Promotions\Application\Contracts\PromotionRepository;
 use App\Modules\Promotions\Application\DTOs\CreatePromotionData;
 use App\Modules\Promotions\Domain\Exceptions\PromotionOverlapDetected;
+use App\Modules\Promotions\Domain\Rules\FreeDaysMustBeValid;
 use App\Modules\Promotions\Domain\Rules\PromotionDatesMustBeValid;
+use App\Modules\Promotions\Domain\Rules\VehicleVolumeTiersMustBeValid;
 use App\Modules\Promotions\Domain\Rules\VolumeTierDaysMustBeValid;
 use App\Shared\Support\SupplierContext;
 use Illuminate\Support\Facades\DB;
@@ -20,23 +22,35 @@ class CreatePromotion
         private readonly SupplierContext $supplierContext,
         private readonly PromotionDatesMustBeValid $datesRule,
         private readonly VolumeTierDaysMustBeValid $tiersRule,
+        private readonly FreeDaysMustBeValid $freeDaysRule,
+        private readonly VehicleVolumeTiersMustBeValid $vehicleTiersRule,
     ) {}
 
     public function handle(CreatePromotionData $data): Promotion
     {
         $this->datesRule->validate($data->validFrom, $data->validTo);
 
-        if ($data->type === 'volume') {
+        if ($data->type === 'volume' && $data->tiers !== []) {
             $this->tiersRule->validate($data->tiers);
+        }
+
+        if ($data->type === 'vehicle_volume' && $data->vehicleTiers !== null && $data->vehicleTiers !== []) {
+            $this->vehicleTiersRule->validate($data->vehicleTiers);
+        }
+
+        if ($data->discountType === 'free_days') {
+            $this->freeDaysRule->validate($data->minRentalDays, $data->freeDays);
         }
 
         $supplierId = $this->supplierContext->id();
 
         return DB::transaction(function () use ($data, $supplierId): Promotion {
             if ($this->promotions->hasActiveOverlap($supplierId, $data)) {
-                throw $data->type === 'seasonal'
-                    ? PromotionOverlapDetected::forSeasonal()
-                    : PromotionOverlapDetected::forVolume();
+                throw match ($data->type) {
+                    'seasonal' => PromotionOverlapDetected::forSeasonal(),
+                    'vehicle_volume' => PromotionOverlapDetected::forVehicleVolume(),
+                    default => PromotionOverlapDetected::forVolume(),
+                };
             }
 
             $promotion = $this->promotions->create($supplierId, $data);

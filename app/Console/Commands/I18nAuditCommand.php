@@ -121,7 +121,7 @@ class I18nAuditCommand extends Command
     private function hasUnsupportedConfiguredLocale(array $locales): bool
     {
         return collect($locales)
-            ->diff(['es', 'en', 'pt', 'fr'])
+            ->diff(['es', 'en', 'pt', 'fr', 'it', 'zh', 'ja'])
             ->isNotEmpty();
     }
 }

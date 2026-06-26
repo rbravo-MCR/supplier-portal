@@ -75,6 +75,7 @@ class RateImportTemplateSpreadsheet
         $this->addStyles($archive);
         $this->addSharedStrings($archive, $strings);
         $this->addSheet($archive, $rows, $strings);
+        $this->addTemplateMetadata($archive, $supplier);
         $this->addLogo($archive);
 
         $archive->close();
@@ -261,5 +262,36 @@ XML);
   </xdr:twoCellAnchor>
 </xdr:wsDr>
 XML);
+    }
+
+    protected function addTemplateMetadata(ZipArchive $archive, Supplier $supplier): void
+    {
+        $metadata = [
+            'type' => 'supplier_portal_rate_template',
+            'supplier_id' => $supplier->id,
+            'supplier_uuid' => $supplier->uuid,
+            'supplier_code' => $supplier->code,
+        ];
+
+        $metadata['signature'] = $this->signature($metadata);
+
+        $archive->addFromString('xl/supplier-portal-template.json', json_encode($metadata, JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * @param  array{type: string, supplier_id: int|null, supplier_uuid: string|null, supplier_code: string|null}  $metadata
+     */
+    protected function signature(array $metadata): string
+    {
+        return hash_hmac(
+            'sha256',
+            implode('|', [
+                $metadata['type'],
+                (string) $metadata['supplier_id'],
+                (string) $metadata['supplier_uuid'],
+                (string) $metadata['supplier_code'],
+            ]),
+            (string) config('app.key'),
+        );
     }
 }

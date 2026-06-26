@@ -315,6 +315,10 @@ new #[Title('Precios')] class extends Component {
     {
         $supplierId = Auth::user()->supplier_id ?: $this->supplierId;
 
+        if (! $supplierId) {
+            return new \Illuminate\Pagination\Paginator([], 10);
+        }
+
         return Rate::query()
             ->with(['supplier:id,name,code', 'currency:id,code,symbol,decimal_places'])
             ->forSupplier($supplierId)

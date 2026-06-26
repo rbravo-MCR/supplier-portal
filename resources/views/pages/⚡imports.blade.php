@@ -79,7 +79,7 @@ new #[Title('Importaciones')] class extends Component {
         ]);
 
         try {
-            $parsed = $spreadsheet->read($this->file->getRealPath(), app()->getLocale());
+            $parsed = $spreadsheet->readForSupplier($this->file->getRealPath(), $this->resolvedSupplierId(), app()->getLocale());
         } catch (Throwable $exception) {
             $this->validationMessage = $exception->getMessage();
             $this->addError('file', $this->validationMessage);
@@ -131,6 +131,10 @@ new #[Title('Importaciones')] class extends Component {
 
     public function updatedSupplierId(): void
     {
+        if (Auth::user()->supplier_id) {
+            $this->supplierId = Auth::user()->supplier_id;
+        }
+
         $this->selectedOfficeIds = [];
         $this->resetValidationState();
         $this->resetSuccessState();
@@ -148,7 +152,7 @@ new #[Title('Importaciones')] class extends Component {
 
         Log::info('Rate import commit started', [
             'user_id' => Auth::id(),
-            'supplier_id' => $this->supplierId,
+            'supplier_id' => $this->resolvedSupplierId(),
             'rows' => count($this->parsedRows),
         ]);
 
@@ -162,13 +166,13 @@ new #[Title('Importaciones')] class extends Component {
                 storedPath: $storedPath,
                 uploadedBy: Auth::id(),
                 rows: $this->parsedRows,
-                supplierId: $this->supplierId,
+                supplierId: $this->resolvedSupplierId(),
             ));
 
             $publishResult = $publishRateImportRows->handle($rateImport, Auth::id());
 
             RateImport::query()
-                ->where('supplier_id', $this->supplierId)
+                ->where('supplier_id', $this->resolvedSupplierId())
                 ->where('id', '!=', $rateImport->id)
                 ->get()
                 ->each(function (RateImport $import) {
@@ -183,7 +187,7 @@ new #[Title('Importaciones')] class extends Component {
 
             Log::error('Rate import commit failed', [
                 'user_id' => Auth::id(),
-                'supplier_id' => $this->supplierId,
+                'supplier_id' => $this->resolvedSupplierId(),
                 'filename' => $originalFilename,
                 'message' => $exception->getMessage(),
             ]);
@@ -250,6 +254,19 @@ new #[Title('Importaciones')] class extends Component {
     {
         $this->successMessage = '';
         $this->lastImportedRows = 0;
+    }
+
+    protected function resolvedSupplierId(): int
+    {
+        $authenticatedSupplierId = Auth::user()->supplier_id;
+
+        if ($authenticatedSupplierId) {
+            $this->supplierId = $authenticatedSupplierId;
+
+            return $authenticatedSupplierId;
+        }
+
+        return (int) $this->supplierId;
     }
 
     /**

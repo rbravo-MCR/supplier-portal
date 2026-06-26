@@ -58,7 +58,7 @@ class AppServiceProvider extends ServiceProvider
         Model::preventLazyLoading(! app()->isProduction());
 
         DB::prohibitDestructiveCommands(
-            app()->isProduction(),
+            app()->isProduction() || config('database.default') !== 'sqlite',
         );
 
         Password::defaults(fn (): ?Password => app()->isProduction()

@@ -5,7 +5,7 @@ use App\Models\Office;
 use App\Models\Promotion;
 use App\Models\VehicleCategory;
 use App\Modules\Promotions\Application\DTOs\CreatePromotionData;
-use App\Modules\Promotions\Application\DTOs\ListPromotionsFilter;
+use App\Modules\Promotions\Application\DTOs\ListPromotionsFilterData;
 use App\Modules\Promotions\Application\DTOs\UpdatePromotionData;
 use App\Modules\Promotions\Application\UseCases\CreatePromotion;
 use App\Modules\Promotions\Application\UseCases\DeletePromotion;
@@ -35,9 +35,17 @@ new #[Title('Promociones')] class extends Component {
 
     public string $discountValue = '';
 
+    public string $minRentalDays = '';
+
+    public string $freeDays = '';
+
+    public string $minVehicleCount = '1';
+
     public string $validFrom = '';
 
     public string $validTo = '';
+
+    public string $status = 'active';
 
     public bool $appliesToAllOffices = false;
 
@@ -48,6 +56,8 @@ new #[Title('Promociones')] class extends Component {
     public array $selectedCategoryIds = [];
 
     public array $tiers = [];
+
+    public array $vehicleTiers = [];
 
     public string $search = '';
 
@@ -78,8 +88,29 @@ new #[Title('Promociones')] class extends Component {
 
     public function updatedType(): void
     {
-        if ($this->type === 'volume' && empty($this->tiers)) {
-            $this->tiers = [['min_days' => 7, 'max_days' => 13, 'discount_value' => 10]];
+        if ($this->type === 'volume') {
+            $this->minVehicleCount = $this->minVehicleCount === '' ? '2' : $this->minVehicleCount;
+        }
+
+        if ($this->type === 'vehicle_volume' && empty($this->vehicleTiers)) {
+            $this->vehicleTiers = [['min_vehicles' => 3, 'max_vehicles' => 5, 'discount_value' => 10]];
+        }
+    }
+
+    public function updatedDiscountType(): void
+    {
+        if ($this->discountType === 'free_days') {
+            $this->discountValue = '';
+            $this->freeDays = $this->freeDays === '' ? '1' : $this->freeDays;
+            $this->minRentalDays = $this->minRentalDays === '' ? '3' : $this->minRentalDays;
+        }
+
+        if ($this->discountType === 'daily_rate' && empty($this->tiers)) {
+            $this->tiers = [
+                ['min_days' => 1, 'max_days' => 4, 'discount_value' => ''],
+                ['min_days' => 5, 'max_days' => 6, 'discount_value' => ''],
+                ['min_days' => 7, 'max_days' => null, 'discount_value' => ''],
+            ];
         }
     }
 
@@ -132,15 +163,31 @@ new #[Title('Promociones')] class extends Component {
         $this->tiers = array_values($this->tiers);
     }
 
+    public function addVehicleTier(): void
+    {
+        $this->vehicleTiers[] = ['min_vehicles' => '', 'max_vehicles' => '', 'discount_value' => ''];
+    }
+
+    public function removeVehicleTier(int $index): void
+    {
+        unset($this->vehicleTiers[$index]);
+        $this->vehicleTiers = array_values($this->vehicleTiers);
+    }
+
     public function save(): void
     {
         $rules = [
             'name' => ['required', 'string', 'max:255'],
-            'type' => ['required', Rule::in(['seasonal', 'volume'])],
-            'discountType' => ['required', Rule::in(['percentage', 'fixed_amount'])],
-            'discountValue' => ['required', 'numeric', 'min:0.01'],
+            'type' => ['required', Rule::in(['seasonal', 'volume', 'vehicle_volume'])],
+            'vehicleTiers' => ['array'],
+            'discountType' => ['required', Rule::in(['percentage', 'fixed_amount', 'free_days', 'daily_rate'])],
+            'discountValue' => [Rule::excludeIf(in_array($this->discountType, ['free_days', 'daily_rate'], true)), 'required', 'numeric', 'min:0.01'],
+            'minRentalDays' => [$this->discountType === 'free_days' ? 'required' : 'nullable', 'integer', 'min:1'],
+            'freeDays' => [$this->discountType === 'free_days' ? 'required' : 'nullable', 'integer', 'min:1'],
+            'minVehicleCount' => [$this->type === 'volume' ? 'required' : 'nullable', 'integer', 'min:1'],
             'validFrom' => ['required', 'date'],
             'validTo' => ['required', 'date', 'after_or_equal:validFrom'],
+            'status' => ['required', Rule::in(['active', 'inactive'])],
             'appliesToAllOffices' => ['boolean'],
             'appliesToAllCategories' => ['boolean'],
             'selectedOfficeIds' => ['array'],
@@ -149,11 +196,20 @@ new #[Title('Promociones')] class extends Component {
             'selectedCategoryIds.*' => ['integer', Rule::exists('vehicle_categories', 'id')->where('supplier_id', Auth::user()->supplier_id)],
         ];
 
-        if ($this->type === 'volume') {
-            $rules['tiers'] = ['required', 'array', 'min:1'];
-            $rules['tiers.*.min_days'] = ['required', 'integer', 'min:1'];
+        if ($this->type === 'volume' || $this->discountType === 'daily_rate') {
+            $rules['tiers'] = $this->discountType === 'daily_rate'
+                ? ['required', 'array', 'min:1']
+                : ['array'];
+            $rules['tiers.*.min_days'] = ['required_with:tiers.*.discount_value', 'integer', 'min:1'];
             $rules['tiers.*.max_days'] = ['nullable', 'integer', 'min:1'];
-            $rules['tiers.*.discount_value'] = ['required', 'numeric', 'min:0.01'];
+            $rules['tiers.*.discount_value'] = ['required_with:tiers.*.min_days', 'numeric', 'min:0.01'];
+        }
+
+        if ($this->type === 'vehicle_volume') {
+            $rules['vehicleTiers'] = ['required', 'array', 'min:1'];
+            $rules['vehicleTiers.*.min_vehicles'] = ['required', 'integer', 'min:1'];
+            $rules['vehicleTiers.*.max_vehicles'] = ['nullable', 'integer', 'min:1'];
+            $rules['vehicleTiers.*.discount_value'] = ['required', 'numeric', 'min:0.01'];
         }
 
         $validated = $this->validate($rules);
@@ -167,14 +223,19 @@ new #[Title('Promociones')] class extends Component {
             app(UpdatePromotion::class)->handle($promotion, new UpdatePromotionData(
                 name: $validated['name'],
                 discountType: $validated['discountType'],
-                discountValue: (float) $validated['discountValue'],
+                discountValue: (float) ($validated['discountValue'] ?? 0),
+                minRentalDays: filled($validated['minRentalDays'] ?? null) ? (int) $validated['minRentalDays'] : null,
+                freeDays: filled($validated['freeDays'] ?? null) ? (int) $validated['freeDays'] : null,
+                minVehicleCount: filled($validated['minVehicleCount'] ?? null) ? (int) $validated['minVehicleCount'] : 1,
                 validFrom: $validated['validFrom'],
                 validTo: $validated['validTo'],
+                status: $validated['status'],
                 appliesToAllOffices: $validated['appliesToAllOffices'],
                 appliesToAllCategories: $validated['appliesToAllCategories'],
                 officeIds: $validated['appliesToAllOffices'] ? [] : $validated['selectedOfficeIds'],
                 categoryIds: $validated['appliesToAllCategories'] ? [] : $validated['selectedCategoryIds'],
-                tiers: $validated['type'] === 'volume' ? $this->tiers : null,
+                tiers: $validated['type'] === 'volume' || $validated['discountType'] === 'daily_rate' ? $this->tiers : null,
+                vehicleTiers: $validated['type'] === 'vehicle_volume' ? $this->vehicleTiers : null,
             ));
 
             Flux::toast(variant: 'success', text: __('Promoción actualizada.'));
@@ -185,14 +246,19 @@ new #[Title('Promociones')] class extends Component {
                 name: $validated['name'],
                 type: $validated['type'],
                 discountType: $validated['discountType'],
-                discountValue: (float) $validated['discountValue'],
+                discountValue: (float) ($validated['discountValue'] ?? 0),
+                minRentalDays: filled($validated['minRentalDays'] ?? null) ? (int) $validated['minRentalDays'] : null,
+                freeDays: filled($validated['freeDays'] ?? null) ? (int) $validated['freeDays'] : null,
+                minVehicleCount: filled($validated['minVehicleCount'] ?? null) ? (int) $validated['minVehicleCount'] : 1,
                 validFrom: $validated['validFrom'],
                 validTo: $validated['validTo'],
+                status: $validated['status'],
                 appliesToAllOffices: $validated['appliesToAllOffices'],
                 appliesToAllCategories: $validated['appliesToAllCategories'],
                 officeIds: $validated['appliesToAllOffices'] ? [] : $validated['selectedOfficeIds'],
                 categoryIds: $validated['appliesToAllCategories'] ? [] : $validated['selectedCategoryIds'],
-                tiers: $validated['type'] === 'volume' ? $this->tiers : [],
+                tiers: $validated['type'] === 'volume' || $validated['discountType'] === 'daily_rate' ? $this->tiers : [],
+                vehicleTiers: $validated['type'] === 'vehicle_volume' ? $this->vehicleTiers : null,
                 createdBy: Auth::id(),
             ));
 
@@ -206,7 +272,7 @@ new #[Title('Promociones')] class extends Component {
     public function edit(string $uuid): void
     {
         $promotion = Promotion::query()
-            ->with(['offices:id', 'vehicleCategories:id', 'tiers'])
+            ->with(['offices:id', 'vehicleCategories:id', 'tiers', 'vehicleTiers'])
             ->where('uuid', $uuid)
             ->firstOrFail();
 
@@ -217,8 +283,12 @@ new #[Title('Promociones')] class extends Component {
         $this->type = $promotion->type;
         $this->discountType = $promotion->discount_type;
         $this->discountValue = (string) $promotion->discount_value;
+        $this->minRentalDays = $promotion->min_rental_days !== null ? (string) $promotion->min_rental_days : '';
+        $this->freeDays = $promotion->free_days !== null ? (string) $promotion->free_days : '';
+        $this->minVehicleCount = (string) $promotion->min_vehicle_count;
         $this->validFrom = $promotion->valid_from->toDateString();
         $this->validTo = $promotion->valid_to->toDateString();
+        $this->status = $promotion->status;
         $this->appliesToAllOffices = $promotion->applies_to_all_offices;
         $this->appliesToAllCategories = $promotion->applies_to_all_categories;
         $this->selectedOfficeIds = $promotion->offices->pluck('id')->toArray();
@@ -226,6 +296,12 @@ new #[Title('Promociones')] class extends Component {
         $this->tiers = $promotion->tiers->map(fn ($t) => [
             'min_days' => $t->min_days,
             'max_days' => $t->max_days,
+            'discount_value' => (string) $t->discount_value,
+        ])->toArray();
+
+        $this->vehicleTiers = $promotion->vehicleTiers->map(fn ($t) => [
+            'min_vehicles' => $t->min_vehicles,
+            'max_vehicles' => $t->max_vehicles,
             'discount_value' => (string) $t->discount_value,
         ])->toArray();
     }
@@ -262,13 +338,16 @@ new #[Title('Promociones')] class extends Component {
     {
         $this->reset([
             'editingUuid', 'name', 'type', 'discountType', 'discountValue',
+            'minRentalDays', 'freeDays', 'minVehicleCount', 'status',
             'appliesToAllOffices', 'appliesToAllCategories',
-            'selectedOfficeIds', 'selectedCategoryIds', 'tiers',
+            'selectedOfficeIds', 'selectedCategoryIds', 'tiers', 'vehicleTiers',
         ]);
         $this->validFrom = now()->toDateString();
         $this->validTo = now()->addDays(30)->toDateString();
         $this->discountType = 'percentage';
         $this->type = 'seasonal';
+        $this->minVehicleCount = '1';
+        $this->status = 'active';
         $this->appliesToAllOffices = false;
         $this->appliesToAllCategories = false;
     }
@@ -278,9 +357,13 @@ new #[Title('Promociones')] class extends Component {
     {
         $supplierId = Auth::user()->supplier_id;
 
+        if (! $supplierId) {
+            return new \Illuminate\Pagination\Paginator([], 10);
+        }
+
         return app(ListPromotions::class)->handle(
             $supplierId,
-            new ListPromotionsFilter(
+            new ListPromotionsFilterData(
                 type: $this->typeFilter ?: null,
                 status: $this->statusFilter ?: null,
                 search: $this->search ?: null,
@@ -332,11 +415,16 @@ new #[Title('Promociones')] class extends Component {
             <!-- Sección: General -->
             <div>
                 <flux:heading size="sm" class="mb-4">{{ __('Información General') }}</flux:heading>
-                <div class="grid gap-4 md:grid-cols-2">
+                <div class="grid gap-4 md:grid-cols-3">
                     <flux:input wire:model="name" :label="__('Nombre de la promoción')" :placeholder="__('Ej: Verano 2026')" required data-test="promotion-name" />
                     <flux:select wire:model.live="type" :label="__('Tipo de promoción')" required data-test="promotion-type">
                         <flux:select.option value="seasonal">{{ __('Temporada') }}</flux:select.option>
                         <flux:select.option value="volume">{{ __('Volumen') }}</flux:select.option>
+                        <flux:select.option value="vehicle_volume">{{ __('Volumen por vehículos') }}</flux:select.option>
+                    </flux:select>
+                    <flux:select wire:model="status" :label="__('Estado')" required data-test="promotion-status">
+                        <flux:select.option value="active">{{ __('Activa') }}</flux:select.option>
+                        <flux:select.option value="inactive">{{ __('Inactiva') }}</flux:select.option>
                     </flux:select>
                 </div>
             </div>
@@ -347,30 +435,43 @@ new #[Title('Promociones')] class extends Component {
             <div>
                 <flux:heading size="sm" class="mb-4">{{ __('Descuento y Vigencia') }}</flux:heading>
                 <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    <flux:select wire:model="discountType" :label="__('Tipo de descuento')" required data-test="promotion-discount-type">
+                    <flux:select wire:model.live="discountType" :label="__('Tipo de descuento')" required data-test="promotion-discount-type">
                         <flux:select.option value="percentage">{{ __('Porcentaje') }}</flux:select.option>
                         <flux:select.option value="fixed_amount">{{ __('Monto fijo') }}</flux:select.option>
+                        <flux:select.option value="free_days">{{ __('Días adicionales') }}</flux:select.option>
+                        <flux:select.option value="daily_rate">{{ __('Precio por días') }}</flux:select.option>
                     </flux:select>
-                    
-                    <flux:input wire:model="discountValue" :label="__('Valor del descuento')" type="number" step="0.01" min="0.01" required data-test="promotion-discount-value" />
-                    
+
+                    @if ($discountType === 'free_days')
+                        <flux:input wire:model="minRentalDays" :label="__('Mín. días renta')" type="number" min="1" required data-test="promotion-min-rental-days" />
+                        <flux:input wire:model="freeDays" :label="__('Días adicionales')" type="number" min="1" required data-test="promotion-free-days" />
+                    @elseif ($discountType !== 'daily_rate')
+                        <flux:input wire:model="discountValue" :label="__('Valor del descuento')" type="number" step="0.01" min="0.01" required data-test="promotion-discount-value" />
+                    @endif
+
+                    @if ($type === 'volume')
+                        <flux:input wire:model="minVehicleCount" :label="__('Mín. vehículos')" type="number" min="1" required data-test="promotion-min-vehicle-count" />
+                    @endif
+
                     <flux:input wire:model="validFrom" :label="__('Vigente desde')" type="date" required data-test="promotion-valid-from" />
                     
                     <flux:input wire:model="validTo" :label="__('Vigente hasta')" type="date" required data-test="promotion-valid-to" />
                 </div>
             </div>
 
-            <!-- Sección: Niveles (Sólo si es por volumen) -->
-            @if ($type === 'volume')
+            <!-- Sección: Niveles -->
+            @if ($type === 'volume' || $discountType === 'daily_rate')
                 <flux:separator variant="subtle" />
                 <div>
-                    <flux:heading size="sm" class="mb-4">{{ __('Niveles de descuento por días') }}</flux:heading>
+                    <flux:heading size="sm" class="mb-4">
+                        {{ $discountType === 'daily_rate' ? __('Precios por cantidad de días') : __('Niveles de descuento por días') }}
+                    </flux:heading>
                     <div class="flex flex-col gap-3">
                         @foreach ($tiers as $index => $tier)
                             <div class="flex items-end gap-3">
                                 <flux:input wire:model="tiers.{{ $index }}.min_days" :label="__('Mín. días')" type="number" min="1" required class="w-24" />
                                 <flux:input wire:model="tiers.{{ $index }}.max_days" :label="__('Máx. días')" type="number" min="1" placeholder="∞" class="w-24" />
-                                <flux:input wire:model="tiers.{{ $index }}.discount_value" :label="__('% Desc.')" type="number" step="0.01" min="0.01" required class="w-28" />
+                                <flux:input wire:model="tiers.{{ $index }}.discount_value" :label="$discountType === 'daily_rate' ? __('Precio día') : __('% Desc.')" type="number" step="0.01" min="0.01" required class="w-28" />
                                 <flux:button type="button" variant="danger" icon="trash" wire:click="removeTier({{ $index }})" class="mb-0.5" data-test="promotion-remove-tier-{{ $index }}">
                                     <span class="sr-only">{{ __('Eliminar') }}</span>
                                 </flux:button>
@@ -378,6 +479,30 @@ new #[Title('Promociones')] class extends Component {
                         @endforeach
                         <div>
                             <flux:button type="button" variant="ghost" size="sm" icon="plus" wire:click="addTier" data-test="promotion-add-tier">
+                                {{ __('Agregar nivel') }}
+                            </flux:button>
+                        </div>
+                    </div>
+                </div>
+            @endif
+
+            @if ($type === 'vehicle_volume')
+                <flux:separator variant="subtle" />
+                <div>
+                    <flux:heading size="sm" class="mb-4">{{ __('Niveles de descuento por cantidad de vehículos') }}</flux:heading>
+                    <div class="flex flex-col gap-3">
+                        @foreach ($vehicleTiers as $index => $tier)
+                            <div class="flex items-end gap-3">
+                                <flux:input wire:model="vehicleTiers.{{ $index }}.min_vehicles" :label="__('Mín. vehículos')" type="number" min="1" required class="w-24" />
+                                <flux:input wire:model="vehicleTiers.{{ $index }}.max_vehicles" :label="__('Máx. vehículos')" type="number" min="1" placeholder="∞" class="w-24" />
+                                <flux:input wire:model="vehicleTiers.{{ $index }}.discount_value" :label="__('% Desc.')" type="number" step="0.01" min="0.01" required class="w-28" />
+                                <flux:button type="button" variant="danger" icon="trash" wire:click="removeVehicleTier({{ $index }})" class="mb-0.5" data-test="promotion-remove-vehicle-tier-{{ $index }}">
+                                    <span class="sr-only">{{ __('Eliminar') }}</span>
+                                </flux:button>
+                            </div>
+                        @endforeach
+                        <div>
+                            <flux:button type="button" variant="ghost" size="sm" icon="plus" wire:click="addVehicleTier" data-test="promotion-add-vehicle-tier">
                                 {{ __('Agregar nivel') }}
                             </flux:button>
                         </div>
@@ -519,6 +644,7 @@ new #[Title('Promociones')] class extends Component {
                     <flux:select.option value="">{{ __('Todos') }}</flux:select.option>
                     <flux:select.option value="seasonal">{{ __('Temporada') }}</flux:select.option>
                     <flux:select.option value="volume">{{ __('Volumen') }}</flux:select.option>
+                    <flux:select.option value="vehicle_volume">{{ __('Volumen por vehículos') }}</flux:select.option>
                 </flux:select>
                 <flux:select wire:model.live="statusFilter" :label="__('Estado')" data-test="promotion-filter-status">
                     <flux:select.option value="">{{ __('Todos') }}</flux:select.option>
@@ -544,13 +670,42 @@ new #[Title('Promociones')] class extends Component {
                     <flux:table.row :key="$promotion->id">
                         <flux:table.cell class="font-medium">{{ $promotion->name }}</flux:table.cell>
                         <flux:table.cell>
-                            <flux:badge :color="$promotion->type === 'seasonal' ? 'sky' : 'emerald'">
-                                {{ $promotion->type === 'seasonal' ? __('Temporada') : __('Volumen') }}
+                            @php
+                                $typeLabel = match ($promotion->type) {
+                                    'seasonal' => __('Temporada'),
+                                    'vehicle_volume' => __('Volumen por vehículos'),
+                                    default => __('Volumen'),
+                                };
+                                $typeColor = match ($promotion->type) {
+                                    'seasonal' => 'sky',
+                                    'vehicle_volume' => 'violet',
+                                    default => 'emerald',
+                                };
+                            @endphp
+                            <flux:badge :color="$typeColor">
+                                {{ $typeLabel }}
                             </flux:badge>
                         </flux:table.cell>
                         <flux:table.cell>
-                            {{ number_format((float) $promotion->discount_value, 2) }}
-                            {{ $promotion->discount_type === 'percentage' ? '%' : '' }}
+                            @if ($promotion->discount_type === 'free_days')
+                                {{ $promotion->free_days }} {{ __('días') }}
+                                @if ($promotion->min_rental_days)
+                                    / {{ __('mín.') }} {{ $promotion->min_rental_days }}
+                                @endif
+                            @elseif ($promotion->discount_type === 'daily_rate')
+                                @foreach ($promotion->tiers->take(3) as $tier)
+                                    <span class="block text-xs">
+                                        {{ $tier->min_days }}{{ $tier->max_days ? '-'.$tier->max_days : '+' }} {{ __('días') }}:
+                                        {{ number_format((float) $tier->discount_value, 2) }}
+                                    </span>
+                                @endforeach
+                            @else
+                                {{ number_format((float) $promotion->discount_value, 2) }}
+                                {{ $promotion->discount_type === 'percentage' ? '%' : '' }}
+                            @endif
+                            @if ($promotion->type === 'volume')
+                                <span class="block text-xs text-zinc-500">{{ __('Mín.') }} {{ $promotion->min_vehicle_count }} {{ __('vehículos') }}</span>
+                            @endif
                         </flux:table.cell>
                         <flux:table.cell>
                             {{ $promotion->valid_from->format('d/m/Y') }} – {{ $promotion->valid_to->format('d/m/Y') }}

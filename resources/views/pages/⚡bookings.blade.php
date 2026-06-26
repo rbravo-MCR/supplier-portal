@@ -110,6 +110,12 @@ new #[Title('Reservas')] class extends Component {
     #[Computed]
     public function bookings(): Paginator
     {
+        $supplierId = Auth::user()->supplier_id;
+
+        if (! $supplierId) {
+            return new \Illuminate\Pagination\Paginator([], 10);
+        }
+
         return $this->pendingBookingQuery()
             ->when($this->search !== '', function (Builder $query): void {
                 $query->search($this->search);

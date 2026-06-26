@@ -119,6 +119,7 @@ return [
             'sslmode' => env('DB_SSLMODE', 'prefer'),
             'options' => [
                 'connect_timeout' => (int) env('DB_CONNECT_TIMEOUT', 5),
+                PDO::ATTR_PERSISTENT => env('DB_PERSISTENT', true),
             ],
         ],
 

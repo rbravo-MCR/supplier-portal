@@ -262,9 +262,15 @@ new #[Title('Categorías')] class extends Component {
     #[Computed]
     public function categories(): Paginator
     {
+        $supplierId = Auth::user()->supplier_id;
+
+        if (! $supplierId) {
+            return new \Illuminate\Pagination\Paginator([], 10);
+        }
+
         return VehicleCategory::query()
             ->with(['supplier:id,name,code', 'catalog:id,code,name_es'])
-            ->forSupplier(Auth::user()->supplier_id)
+            ->forSupplier($supplierId)
             ->when($this->search !== '', function (Builder $query): void {
                 $search = str($this->search)->upper()->toString();
 

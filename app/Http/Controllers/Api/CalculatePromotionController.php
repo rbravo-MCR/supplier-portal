@@ -30,6 +30,7 @@ class CalculatePromotionController extends Controller
             dropoffAt: $validated['dropoff_at'],
             baseAmount: (float) $validated['base_amount'],
             currency: str($validated['currency'])->upper()->toString(),
+            vehicleCount: (int) ($validated['vehicle_count'] ?? 1),
         ));
 
         return response()->json($result);
