@@ -157,10 +157,18 @@ QUEUE_CONNECTION=database
 SESSION_ENCRYPT=true
 SESSION_SECURE_COOKIE=true
 HEALTH_SECRET=change-me
+SUPPLIER_SERVICE_ALLOWED_IPS=10.0.0.0/16
 ```
 
 `APP_URL` must be the real production domain before deployment. Do not deploy with
 `https://supplier-portal.example.com` or any placeholder value.
+
+Configura `SUPPLIER_SERVICE_ALLOWED_IPS` durante el despliegue a produccion,
+usando el CIDR privado real o las IPs de origen que pueden llamar los endpoints
+de supplier-service. En AWS, normalmente debe ser la subred/CIDR privada, el
+origen controlado por security group, o el rango del load balancer/ingress
+interno usado por el microservicio `supplier-service`. No uses una allowlist
+publica como control principal.
 
 Recommended deployment sequence:
 
@@ -185,6 +193,8 @@ external deployment controls are confirmed:
 - `APP_URL` points to the real production domain.
 - The private JSON API is isolated at the network layer so only the Outlet
   microservice can call it.
+- `SUPPLIER_SERVICE_ALLOWED_IPS` esta configurado con el CIDR privado real de AWS
+  o con el rango de origen del proxy/load balancer interno que llega a Laravel.
 
 Production readiness checks:
 
@@ -218,6 +228,18 @@ code. They are private integration endpoints for the Outlet microservice only.
 Production infrastructure must enforce that boundary with private networking,
 security groups, firewall rules, ingress allowlists, or equivalent controls.
 Do not expose these API routes directly to the public internet.
+
+Laravel tambien aplica `SUPPLIER_SERVICE_ALLOWED_IPS` en los dos endpoints de
+escritura `/api/supplier-service/*`. Cuando `APP_ENV=production`, una allowlist
+vacia falla cerrada con `403`. Configura este valor en AWS al momento del
+despliegue mediante variables de entorno, Secrets Manager, Parameter Store,
+definicion de tarea ECS, entorno de Elastic Beanstalk, o secret/config map de
+Kubernetes.
+
+Si Supplier Portal esta detras de ALB, Nginx, ECS, ingress de EKS u otro proxy,
+confirma que IP de origen recibe Laravel. Permite el CIDR del proxy/load balancer
+interno que realmente llega a PHP, o configura trusted proxies de forma segura
+para que `Request::ip()` resuelva la direccion privada esperada del origen.
 
 ### Supplier Service
 
