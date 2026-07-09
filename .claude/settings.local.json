@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Force)",
+      "Bash(Select-Object -First 20)",
+      "Bash(php artisan *)",
+      "Bash(vendor/bin/pint app/Models/City.php app/Models/Zone.php app/Models/Country.php --format agent)",
+      "Bash(Get-ChildItem -Path \"C:\\\\proyectos\\\\PHP\\\\supplier-portal\" -Recurse -Directory -Force)",
+      "Bash(Select-Object -First 30)",
+      "Bash(Format-Table FullName)",
+      "mcp__laravel-boost__database-query",
+      "Skill(qa-sr)",
+      "Bash(vendor/bin/pint *)",
+      "Bash(Remove-Item *)",
+      "mcp__laravel-boost__get-absolute-url",
+      "mcp__playwright__browser_navigate",
+      "mcp__playwright__browser_snapshot",
+      "Bash(grep -v \"//\\\\|dump_\\\\|_dump\\\\|dumpable\\\\|dump_path\\\\|isDumping\\\\|getDump\\\\|DumpContext\\\\|Dumper\\\\|Dump\\\\b\")",
+      "Bash(xargs ls)",
+      "Bash(curl -s -X POST http://localhost:8000/api/supplier-service/bookings -H 'Authorization: Bearer supplier-service-dev-token-2026' -H 'Content-Type: application/json' -H 'Accept: application/json' -d '{ *)",
+      "Bash(python -m json.tool)",
+      "Bash(curl *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(gh pr *)",
+      "mcp__plugin_context-mode_context-mode__ctx_batch_execute",
+      "mcp__plugin_context-mode_context-mode__ctx_search",
+      "mcp__laravel-boost__database-schema",
+      "Bash(python3 -c \"import sys,json; data=sys.stdin.read\\(\\); [print\\(line\\) for line in data.split\\('\\\\n'\\) if line.startswith\\('{'\\)]\")",
+      "Bash(python3 -c \"import sys; data=sys.stdin.read\\(\\); lines=[l for l in data.split\\('\\\\n'\\) if '\\\\\"result\\\\\"' in l or '\\\\\"passed\\\\\"' in l or l.startswith\\('{'\\)] ; print\\('\\\\n'.join\\(lines[:3]\\)\\)\")"
+    ]
+  },
+  "enabledMcpjsonServers": [
+    "laravel-boost"
+  ]
+}
